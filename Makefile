@@ -26,9 +26,10 @@ BOOT_IMG_SIZE_KB := 1024
 BOOT_IMG        := boot.img
 ROOTFS_IMG      := rootfs.img
 ROOTFS_EXT2_IMG := rootfs-ext2.img
+ROOTFS_EXT4_IMG := rootfs-ext4.img
 HD_IMG          := hdimage.bin
 
-.PHONY: all stage hd hd-fat32 cd run run-fat32 run-iso clean distclean FORCE
+.PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
 
@@ -70,31 +71,45 @@ $(ROOTFS_IMG): stage
 		mcopy -i $(CURDIR)/$(ROOTFS_IMG) "$$f" "::$$f"; \
 	done
 
-# ext2 root, the default. Names are lowercased and the .ELF suffix dropped,
-# because that is what the shell and init look for on an ext2 filesystem.
-$(ROOTFS_EXT2_IMG): stage
-	dd if=/dev/zero of=$(ROOTFS_EXT2_IMG) bs=1k count=$(ROOTFS_SIZE_KB) status=none
-	mkfs.ext2 -b 1024 -F -q $(ROOTFS_EXT2_IMG)
-	debugfs -w -R "mkdir usr" $(ROOTFS_EXT2_IMG) >/dev/null 2>&1
-	debugfs -w -R "mkdir usr/bin" $(ROOTFS_EXT2_IMG) >/dev/null 2>&1
-	debugfs -w -R "mkdir etc" $(ROOTFS_EXT2_IMG) >/dev/null 2>&1
-	debugfs -w -R "mkdir home" $(ROOTFS_EXT2_IMG) >/dev/null 2>&1
-	debugfs -w -R "mkdir home/root" $(ROOTFS_EXT2_IMG) >/dev/null 2>&1
-	@cd $(STAGE) && find usr etc -type f | while read f; do \
-		target=$$(echo "$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$//'); \
-		debugfs -w -R "write $$f $$target" $(CURDIR)/$(ROOTFS_EXT2_IMG) >/dev/null 2>&1; \
+# An ext2 or ext4 root. Names are lowercased and the .ELF suffix dropped,
+# because that is what the shell and init look for on these filesystems.
+#
+# One recipe for both: the two differ in the mkfs invocation and nothing else,
+# since debugfs speaks to either and the directory layout is the same. $(1) is
+# the image, $(2) the mkfs command.
+#
+# ext4 is built without a journal for now. A journal is only *compat*, so its
+# presence would not stop this mounting — but writing to a journalled
+# filesystem without journalling the writes leaves a journal describing a past
+# that never happened, which is worse than not having one.
+define ROOTFS_RULE
+$(1): stage
+	dd if=/dev/zero of=$(1) bs=1k count=$$(ROOTFS_SIZE_KB) status=none
+	$(2) $(1)
+	debugfs -w -R "mkdir usr" $(1) >/dev/null 2>&1
+	debugfs -w -R "mkdir usr/bin" $(1) >/dev/null 2>&1
+	debugfs -w -R "mkdir etc" $(1) >/dev/null 2>&1
+	debugfs -w -R "mkdir home" $(1) >/dev/null 2>&1
+	debugfs -w -R "mkdir home/root" $(1) >/dev/null 2>&1
+	@cd $$(STAGE) && find usr etc -type f | while read f; do \
+		target=$$$$(echo "$$$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$$$//'); \
+		debugfs -w -R "write $$$$f $$$$target" $$(CURDIR)/$(1) >/dev/null 2>&1; \
 	done
 	@# debugfs reports failure on stderr and still exits 0, so a write that
 	@# does not land is otherwise invisible: the image simply boots without
 	@# that program. Check every staged file arrived rather than trusting it.
-	@cd $(STAGE) && missing=0; for f in `find usr etc -type f`; do \
-		target=$$(echo "$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$//'); \
-		if debugfs -R "stat $$target" $(CURDIR)/$(ROOTFS_EXT2_IMG) 2>&1 | grep -q 'File not found'; then \
-			echo "  MISSING from ext2 image: $$target (staged as $$f)" >&2; \
+	@cd $$(STAGE) && missing=0; for f in `find usr etc -type f`; do \
+		target=$$$$(echo "$$$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$$$//'); \
+		if debugfs -R "stat $$$$target" $$(CURDIR)/$(1) 2>&1 | grep -q 'File not found'; then \
+			echo "  MISSING from $(1): $$$$target (staged as $$$$f)" >&2; \
 			missing=1; \
 		fi; \
 	done; \
-	if [ $$missing -ne 0 ]; then echo "ext2 image is incomplete" >&2; exit 1; fi
+	if [ $$$$missing -ne 0 ]; then echo "$(1) is incomplete" >&2; exit 1; fi
+endef
+
+$(eval $(call ROOTFS_RULE,$(ROOTFS_EXT2_IMG),mkfs.ext2 -b 1024 -F -q))
+$(eval $(call ROOTFS_RULE,$(ROOTFS_EXT4_IMG),mkfs.ext4 -b 1024 -F -q -O ^has_journal))
 
 # The EFI system partition: the loader, the kernel it loads, and the modules it
 # hands the kernel. boot.img rides along as a module.
@@ -121,6 +136,11 @@ hd: fat.img $(ROOTFS_EXT2_IMG)
 		--part fat.img --type system \
 		--part $(ROOTFS_EXT2_IMG) --type linux
 
+hd-ext4: fat.img $(ROOTFS_EXT4_IMG)
+	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
+		--part fat.img --type system \
+		--part $(ROOTFS_EXT4_IMG) --type linux
+
 hd-fat32: fat.img $(ROOTFS_IMG)
 	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
 		--part fat.img --type system \
@@ -144,6 +164,9 @@ QEMU_FLAGS = -cpu max -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
 run: hd
 	qemu-system-x86_64 $(QEMU_FLAGS) -serial stdio -hda $(HD_IMG)
 
+run-ext4: hd-ext4
+	qemu-system-x86_64 $(QEMU_FLAGS) -serial stdio -hda $(HD_IMG)
+
 run-fat32: hd-fat32
 	qemu-system-x86_64 $(QEMU_FLAGS) -hda $(HD_IMG)
 
@@ -154,7 +177,7 @@ run-iso: cd
 
 clean:
 	rm -rf $(STAGE) iso
-	rm -f fat.img $(BOOT_IMG) $(ROOTFS_IMG) $(ROOTFS_EXT2_IMG) $(HD_IMG) cdimage.iso
+	rm -f fat.img $(BOOT_IMG) $(ROOTFS_IMG) $(ROOTFS_EXT2_IMG) $(ROOTFS_EXT4_IMG) $(HD_IMG) cdimage.iso
 
 # Also clean the trees we build from.
 distclean: clean
