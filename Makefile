@@ -29,6 +29,13 @@ ROOTFS_EXT2_IMG := rootfs-ext2.img
 ROOTFS_EXT4_IMG := rootfs-ext4.img
 HD_IMG          := hdimage.bin
 
+# An EFI application to offer in the boot menu, if this host has one.
+SHELL_EFI       ?= /usr/share/edk2/ovmf/Shell.efi
+# And a Linux kernel, to show the handover protocol working. Empty by default:
+# an 18 MB kernel belongs in a boot test, not in every image this makes. Set it
+# to a bzImage to get a Linux entry in the menu.
+LINUX_KERNEL    ?=
+
 .PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
@@ -120,6 +127,28 @@ fat.img: stage $(BOOT_IMG)
 	mmd -i fat.img ::/EFI/BOOT
 	mcopy -i fat.img $(STAGE)/BOOTX64.EFI ::/EFI/BOOT
 	mcopy -i fat.img $(STAGE)/kernel.bin ::/kernel.bin
+	@# The boot menu is written to match what actually goes into the image, so
+	@# it never offers something that is not there. Anything beyond Quark is
+	@# whatever this build host happened to have lying around: a UEFI shell to
+	@# show that Bang can hand off to another EFI application at all — which is
+	@# how it would reach a Windows boot manager — and a Linux kernel to show
+	@# the handover protocol working.
+	@cp bang.cfg $(STAGE)/bang.cfg
+	@if [ -f $(SHELL_EFI) ]; then \
+		mmd -i fat.img ::/EFI/tools; \
+		mcopy -i fat.img $(SHELL_EFI) ::/EFI/tools/Shell.efi; \
+		printf '\nentry UEFI Shell\n    chainload \\EFI\\tools\\Shell.efi\n' >> $(STAGE)/bang.cfg; \
+	 fi
+	@if [ -n "$(LINUX_KERNEL)" ] && [ -f "$(LINUX_KERNEL)" ]; then \
+		mcopy -i fat.img $(LINUX_KERNEL) ::/vmlinuz; \
+		printf '\nentry Linux\n    linux   \\vmlinuz\n' >> $(STAGE)/bang.cfg; \
+		if [ -f initrd.img ]; then \
+			mcopy -i fat.img initrd.img ::/initrd.img; \
+			printf '    initrd  \\initrd.img\n' >> $(STAGE)/bang.cfg; \
+		fi; \
+		printf '    options console=ttyS0 earlyprintk=serial,ttyS0 panic=5\n' >> $(STAGE)/bang.cfg; \
+	 fi
+	mcopy -i fat.img $(STAGE)/bang.cfg ::/bang.cfg
 	mmd -i fat.img ::/drivers
 	@for f in $(STAGE)/drivers/*; do mcopy -i fat.img "$$f" ::/drivers/; done
 	mcopy -i fat.img $(BOOT_IMG) ::/drivers/boot.img
