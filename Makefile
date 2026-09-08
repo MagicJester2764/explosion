@@ -186,7 +186,15 @@ cd: fat.img
 # -cpu max is deliberate: the default CPU models expose neither SMEP nor SMAP,
 # so the kernel's supervisor-mode protections are silently inactive without it
 # and a boot test proves nothing about them.
-QEMU_FLAGS = -cpu max -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
+#
+# KVM whenever the machine has it. Without it QEMU interprets every
+# instruction, and anything that moves pixels — a compositor pushing a
+# screenful per frame — runs tens of times slower than the hardware it is
+# pretending to be. That reads as "the window manager is broken" rather than
+# as "this is an emulator", which is the wrong thing to have to work out.
+KVM := $(shell test -w /dev/kvm && echo -enable-kvm)
+
+QEMU_FLAGS = $(KVM) -cpu max -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
              -device rtl8139,netdev=n -netdev user,id=n
 
 run: hd
