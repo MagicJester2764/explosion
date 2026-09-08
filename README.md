@@ -38,3 +38,29 @@ stage/etc/            passwd
 Quark produces all of that through `make -C ../quark install DESTDIR=…`, so
 nothing here reaches into its source tree, and nothing there knows an image
 exists.
+
+## Packages
+
+`tools/qpkg` builds, inspects and installs packages. A package is a gzipped tar
+holding `PKGINFO` and a `files/` tree rooted at the target's filesystem root —
+nothing exotic; the point is that installing a program is a defined operation
+with metadata attached rather than a `cp` in a Makefile.
+
+```bash
+cd stage
+../tools/qpkg build coreutils 0.1.0 usr/bin/CAT.ELF usr/bin/LS.ELF
+../tools/qpkg info coreutils-0.1.0.qpkg
+../tools/qpkg install coreutils-0.1.0.qpkg /path/to/root
+```
+
+`info` reads the capability manifest out of each binary, the same way the
+spawner finds it at runtime, so what a package will be allowed to do is
+inspectable before it is installed rather than discovered when it runs:
+
+```
+capabilities requested:
+  usr/bin/CAT.ELF:
+    phys_alloc 64 pages
+```
+
+A program that requests nothing shows nothing, and gets nothing.
