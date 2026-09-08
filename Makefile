@@ -78,10 +78,9 @@ $(ROOTFS_IMG): stage
 # since debugfs speaks to either and the directory layout is the same. $(1) is
 # the image, $(2) the mkfs command.
 #
-# ext4 is built without a journal for now. A journal is only *compat*, so its
-# presence would not stop this mounting — but writing to a journalled
-# filesystem without journalling the writes leaves a journal describing a past
-# that never happened, which is worse than not having one.
+# The ext4 root carries a journal. 1 MiB is the smallest mke2fs will make with
+# 1 KiB blocks, and a transaction here is a dozen blocks, so the size is set by
+# what the tool allows rather than by what is needed.
 define ROOTFS_RULE
 $(1): stage
 	dd if=/dev/zero of=$(1) bs=1k count=$$(ROOTFS_SIZE_KB) status=none
@@ -109,7 +108,7 @@ $(1): stage
 endef
 
 $(eval $(call ROOTFS_RULE,$(ROOTFS_EXT2_IMG),mkfs.ext2 -b 1024 -F -q))
-$(eval $(call ROOTFS_RULE,$(ROOTFS_EXT4_IMG),mkfs.ext4 -b 1024 -F -q -O ^has_journal))
+$(eval $(call ROOTFS_RULE,$(ROOTFS_EXT4_IMG),mkfs.ext4 -b 1024 -F -q -J size=1))
 
 # The EFI system partition: the loader, the kernel it loads, and the modules it
 # hands the kernel. boot.img rides along as a module.
