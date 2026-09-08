@@ -84,6 +84,17 @@ $(ROOTFS_EXT2_IMG): stage
 		target=$$(echo "$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$//'); \
 		debugfs -w -R "write $$f $$target" $(CURDIR)/$(ROOTFS_EXT2_IMG) >/dev/null 2>&1; \
 	done
+	@# debugfs reports failure on stderr and still exits 0, so a write that
+	@# does not land is otherwise invisible: the image simply boots without
+	@# that program. Check every staged file arrived rather than trusting it.
+	@cd $(STAGE) && missing=0; for f in `find usr etc -type f`; do \
+		target=$$(echo "$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$//'); \
+		if debugfs -R "stat $$target" $(CURDIR)/$(ROOTFS_EXT2_IMG) 2>&1 | grep -q 'File not found'; then \
+			echo "  MISSING from ext2 image: $$target (staged as $$f)" >&2; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ $$missing -ne 0 ]; then echo "ext2 image is incomplete" >&2; exit 1; fi
 
 # The EFI system partition: the loader, the kernel it loads, and the modules it
 # hands the kernel. boot.img rides along as a module.
