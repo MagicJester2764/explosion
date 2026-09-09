@@ -50,3 +50,26 @@ Two gaps in the C library were found by exactly that, and both were real rather
 than gcc being fussy: there was no `sys/types.h` and no `time.h`, and `stdio.h`
 had no `FILE` — `fprintf` took a descriptor. A library that cannot say
 `fprintf(stderr, ...)` is not one anybody can port to.
+
+## musl
+
+`build-musl.sh` builds musl against the same target. It runs: a musl program
+prints, allocates, reads its arguments and exits on Quark.
+
+The patch is four files, which is the point — musl's system call interface is
+that narrow. `syscall_arch.h` calls a translation layer instead of issuing the
+`syscall` instruction, because Quark's numbers mean different things; two
+assembly files that issue `syscall` themselves are pointed at the same layer;
+and `crt_arch.h` builds the argc/argv/environment/auxv block musl expects to
+find on its stack out of the page Quark's spawner maps instead.
+
+The layer itself is `quark/user/linux-abi`. It is mostly an IPC client wearing
+Linux's numbers: on a microkernel, `write` to a descriptor is a message to
+whatever is on the other end of it, and `open` is a message to the VFS. Where
+there is no equivalent it returns `-ENOSYS` rather than pretending — a libc
+told "no" copes, and one handed a lie fails somewhere unrelated and much later.
+
+Not done: files. `open`, `read` on a file, `close` and `stat` are the refusals
+that matter, and they are what coreutils needs next. The C library already has
+that VFS client; it has to be reachable from underneath a different libc, which
+is the next piece of work rather than a hard problem.
