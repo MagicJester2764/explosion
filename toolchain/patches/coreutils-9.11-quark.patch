@@ -1,0 +1,24 @@
+--- a/build-aux/config.sub
++++ b/build-aux/config.sub
+@@ -2097,6 +2097,7 @@
+ 	| ptx* \
+ 	| pw32* \
+ 	| qnx* \
++	| quark* \
+ 	| rdos* \
+ 	| redox* \
+ 	| rhapsody* \
+--- a/lib/getlocalename_l-unsafe.c
++++ b/lib/getlocalename_l-unsafe.c
+@@ -658,6 +658,11 @@
+       };
+       const char *name = ((struct __locale_t *) locale)->mb_cur_max == 4 ? "C.UTF-8" : "C";
+       return (struct string_with_storage) { name, STORAGE_INDEFINITE };
++#elif defined __quark__
++      /* Quark has one locale and it is "C", so every category is that one
++         whatever locale_t was passed.  */
++      (void) category;
++      return (struct string_with_storage) { "C", STORAGE_INDEFINITE };
+ #else
+  #error "Please port gnulib getlocalename_l-unsafe.c to your platform! Report this to bug-gnulib."
+ #endif

@@ -36,6 +36,13 @@ SHELL_EFI       ?= /usr/share/edk2/ovmf/Shell.efi
 # to a bzImage to get a Linux entry in the menu.
 LINUX_KERNEL    ?=
 
+# GNU coreutils for Quark, if a build of it is around. Point this at the `src/`
+# directory `toolchain/build-coreutils.sh` leaves behind and the image carries
+# the programs. Empty by default for the same reason as LINUX_KERNEL: it is 15
+# MB of somebody else's build, and the toolchain that produces it is an install
+# rather than a checkout.
+COREUTILS       ?=
+
 .PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
@@ -52,6 +59,9 @@ stage: FORCE
 	$(MAKE) -C $(BANG_DIR) build
 	@cp $(BANG_DIR)/BOOTX64.EFI $(STAGE)/BOOTX64.EFI
 	@mkdir -p $(STAGE)/home/root
+	@# Runs either way: with no COREUTILS it takes back what a previous stage
+	@# put there, so unsetting it un-stages them.
+	@./tools/stage-coreutils.sh $(STAGE) $(COREUTILS)
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------
@@ -97,6 +107,7 @@ $(1): stage
 	debugfs -w -R "mkdir etc" $(1) >/dev/null 2>&1
 	debugfs -w -R "mkdir home" $(1) >/dev/null 2>&1
 	debugfs -w -R "mkdir home/root" $(1) >/dev/null 2>&1
+	debugfs -w -R "mkdir tmp" $(1) >/dev/null 2>&1
 	@cd $$(STAGE) && find usr etc -type f | while read f; do \
 		target=$$$$(echo "$$$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$$$//'); \
 		debugfs -w -R "write $$$$f $$$$target" $$(CURDIR)/$(1) >/dev/null 2>&1; \

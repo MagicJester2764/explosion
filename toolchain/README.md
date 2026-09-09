@@ -69,7 +69,67 @@ whatever is on the other end of it, and `open` is a message to the VFS. Where
 there is no equivalent it returns `-ENOSYS` rather than pretending — a libc
 told "no" copes, and one handed a lie fails somewhere unrelated and much later.
 
-Not done: files. `open`, `read` on a file, `close` and `stat` are the refusals
-that matter, and they are what coreutils needs next. The C library already has
-that VFS client; it has to be reachable from underneath a different libc, which
-is the next piece of work rather than a hard problem.
+`build-musl.sh` also writes a specs file and an `x86_64-quark-musl-gcc`
+wrapper, so musl is a choice the compiler knows how to make rather than a pile
+of flags every build system would have to be told. That is what makes the next
+part possible at all.
+
+## coreutils
+
+`build-coreutils.sh` builds GNU coreutils 9.11: 102 programs, and they run.
+`wc /etc/passwd` on Quark reports the same counts as `cwc`, the hand-written
+program that was the previous high-water mark for this phase, and pipelines
+work — `seq 1 12 | wc -l` says 12.
+
+The patch is two hunks. One teaches coreutils' own `config.sub` that quark is
+an operating system, which every autoconf package will need. The other adds a
+branch to a gnulib file whose `#error` asks, in as many words, to be ported:
+Quark has one locale and it is "C", so that is what it says. Everything else
+about coreutils built unmodified.
+
+Three things were needed on the Quark side, and each was a real gap rather
+than a workaround:
+
+- **A stack worth the name.** Programs got sixteen kilobytes. GNU `wc` puts a
+  quarter of a megabyte on its stack in one frame and faulted on the first
+  write to it. It is a megabyte now, mapped eagerly because there is no demand
+  paging — which is also why it is not Linux's eight.
+- **A manifest per image, not per program.** File data moves through a page the
+  program owns, so a program that opens a file needs a capability to allocate
+  one. coreutils does not know that; it called `fopen`. The C library declares
+  it, in an object linked beside the entry point, and a spawner now grants
+  every manifest block in an image rather than the first one it finds.
+- **Closing a standard descriptor is not an error.** Every tool that tidies up
+  after itself calls `close(0)`, and answering EBADF made all of them print a
+  complaint they could do nothing about.
+- **`access(2)`, answered by the server.** gnulib's `euidaccess` tries
+  `faccessat2`, then `faccessat`, and reports whatever the last one said, so
+  refusing both made `sort /etc/passwd` say "cannot read" about a file it could
+  read perfectly well. The layer answers by opening the file — that runs the
+  VFS's own permission check — and the open reply now carries the file's mode
+  and what *this* caller may do with it. Deriving that here would have meant
+  keeping a second copy of the permission policy in every C library.
+- **One CPU, said out loud.** `sched_getaffinity` reports a mask with one bit,
+  which is a fact about this kernel rather than a placeholder, and it is what
+  makes `nproc` right.
+- **`fadvise` is advice.** Doing nothing with it is a complete implementation;
+  refusing it is not.
+
+Still refused, and harmless so far: `getrlimit` and `sysinfo`, which `sort`
+asks for when sizing its buffer and copes without. `EXTRA_CFLAGS=-DQUARK_ABI_TRACE`
+on the layer makes every unimplemented call name itself on stderr, which is how
+each of the above was found — an ENOSYS otherwise reaches the program as a bare
+errno and gets reported as whatever it was doing at the time.
+
+## Putting them in an image
+
+ExplOSion does not build coreutils — that needs this toolchain, which is an
+install rather than a checkout — so it takes a directory somebody else built:
+
+    make -C ../explosion hd COREUTILS=/path/to/build-coreutils-quark/src
+
+The programs are stripped on the way in, because the debug info is three
+quarters of 54 MB and the root filesystem is 33. Quark's own userland keeps its
+names: `ls` here would be coreutils' `ls`, which wants `getdents64`, while the
+in-tree one lists a directory over the VFS protocol and works. With `COREUTILS`
+unset the staging step takes back anything a previous one put there.

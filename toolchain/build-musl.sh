@@ -29,8 +29,44 @@ cd "$MUSL_SRC"
 make
 make install
 
+# Make musl a choice the compiler knows how to make, rather than a pile of
+# flags every build system would have to be told. This is what musl-gcc is on
+# Linux, and it is what lets `./configure && make` work on software that was
+# not written for Quark.
+QUARK_SRC=${QUARK_SRC:-$HERE/../../quark}
+cat > "$PREFIX/lib/musl-quark.specs" <<SPECS
+# musl as the C library for x86_64-quark.
+#
+# Only the pieces that say *which* library are overridden. The link spec is
+# left alone on purpose: the base address, the link script, static and non-PIE
+# are properties of Quark and are the same whichever libc is on top.
+
+%rename cpp_options old_cpp_options
+
+*cpp_options:
+-nostdinc -isystem $PREFIX/include -isystem $QUARK_SRC/user/libc/include %(old_cpp_options)
+
+*cc1:
+%(cc1_cpu) -nostdinc -isystem $PREFIX/include -isystem $QUARK_SRC/user/libc/include
+
+*startfile:
+$PREFIX/lib/crt1.o $PREFIX/lib/crti.o $QUARK_SRC/user/linux-abi/src/manifest.o
+
+*endfile:
+$PREFIX/lib/crtn.o
+
+*lib:
+$PREFIX/lib/libc.a $QUARK_SRC/user/linux-abi/liblinux-abi.a
+SPECS
+
+BINDIR=$(dirname "$(command -v x86_64-quark-gcc)")
+cat > "$BINDIR/x86_64-quark-musl-gcc" <<WRAP
+#!/bin/sh
+# x86_64-quark, with musl as its C library.
+exec x86_64-quark-gcc -specs="$PREFIX/lib/musl-quark.specs" "\$@"
+WRAP
+chmod +x "$BINDIR/x86_64-quark-musl-gcc"
+
 echo
-echo "Done. A program against it links as:"
-echo "    x86_64-quark-gcc -nostdlib -nostdinc -isystem $PREFIX/include \\"
-echo "        -o prog prog.c $PREFIX/lib/crt1.o $PREFIX/lib/libc.a \\"
-echo "        <quark>/user/linux-abi/liblinux-abi.a"
+echo "Done. Programs build with no flags at all:"
+echo "    x86_64-quark-musl-gcc hello.c -o hello"
