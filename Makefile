@@ -43,6 +43,12 @@ LINUX_KERNEL    ?=
 # rather than a checkout.
 COREUTILS       ?=
 
+# Wayland clients built against the ported libwayland, by
+# `toolchain/build-weston-client.sh`. Same arrangement and same reason as
+# COREUTILS: they are musl programs, and the toolchain that makes them is an
+# install rather than a checkout.
+WAYLAND_CLIENTS ?=
+
 .PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
@@ -62,6 +68,17 @@ stage: FORCE
 	@# Runs either way: with no COREUTILS it takes back what a previous stage
 	@# put there, so unsetting it un-stages them.
 	@./tools/stage-coreutils.sh $(STAGE) $(COREUTILS)
+	@if [ -n "$(WAYLAND_CLIENTS)" ]; then \
+		n=0; \
+		for f in $(WAYLAND_CLIENTS)/*; do \
+			[ -f "$$f" ] && [ -x "$$f" ] || continue; \
+			b=`basename $$f`; \
+			cp "$$f" $(STAGE)/usr/bin/$$b; \
+			x86_64-quark-strip $(STAGE)/usr/bin/$$b 2>/dev/null || true; \
+			n=$$((n + 1)); \
+		done; \
+		echo "wayland: staged $$n clients"; \
+	fi
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------
