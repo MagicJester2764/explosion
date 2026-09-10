@@ -166,9 +166,29 @@ workaround:
   own C library instead of musl's and every file wanting `fcntl` stopped
   compiling. Anything built for musl installs into musl's prefix now.
 
-**Where it stops.** A musl program links libwayland, and
-`wl_display_connect_to_fd` succeeds on a socketpair — so `WAYLAND_SOCKET`,
-descriptor passing and the connection setup all work. It dies at
-`wl_display_get_registry`, the first call that marshals a protocol message.
-That is where Phase 8's implementation starts, and it is a much more precise
-place to start than "port libwayland".
+- **`-Db_staticpic=false`, and every meson package will need it.** meson
+  compiles static libraries `-fPIC` by default. A Quark program is static and
+  not PIE, and the target forces `-mcmodel=large`; in that combination taking
+  the address of a default-visibility symbol goes through the GOT using a base
+  register a non-PIE binary never sets up, and the address comes out zero.
+
+That last one is worth the space because of how far it failed from its cause.
+libwayland built, linked, connected over a socketpair, and then died — and the
+reason was that `&wl_display_interface` evaluated to NULL inside libwayland's
+own code, while `nm` showed the symbol perfectly well placed. Four rounds of
+bisecting the marshal path found it; nothing about the symptom pointed at a
+compiler flag.
+
+**Where it gets to.** An unmodified musl program now does this on Quark:
+
+```
+WAYLAND_SOCKET=3
+wl_display_connect: OK
+get_registry: OK
+flush wrote 12 bytes
+disconnected
+```
+
+Twelve bytes of real Wayland protocol, marshalled by upstream libwayland and
+written down a Quark socketpair. What is missing is the thing on the other end.
+

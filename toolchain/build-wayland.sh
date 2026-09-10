@@ -14,6 +14,14 @@
 # $WAYLAND_DISPLAY or a socket path, and takes it as an already-connected
 # descriptor — which is exactly the shape Quark has, so upstream is used
 # unmodified. That is also why no filesystem socket namespace was ever needed.
+#
+# -Db_staticpic=false is not a preference, and every meson package built for
+# this target will need it. meson compiles static libraries -fPIC by default;
+# a Quark program is static and not PIE, and the target forces -mcmodel=large.
+# In that combination, taking the address of a default-visibility symbol goes
+# through the GOT with a base register that a non-PIE binary never sets up, so
+# the address comes out as zero. It fails nowhere near the cause: libwayland
+# linked, connected, and then found `&wl_display_interface` was NULL.
 set -e
 
 WL_SRC=${1:?usage: build-wayland.sh <wayland-src>}
@@ -41,7 +49,8 @@ rm -rf build-quark
 meson setup build-quark \
     --cross-file /tmp/quark-cross.ini --native-file /tmp/quark-native.ini \
     -Dlibraries=true -Dscanner=false -Dtests=false \
-    -Ddocumentation=false -Ddtd_validation=false -Ddefault_library=static
+    -Ddocumentation=false -Ddtd_validation=false -Ddefault_library=static \
+    -Db_staticpic=false
 ninja -C build-quark
 
 echo
