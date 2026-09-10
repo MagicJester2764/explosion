@@ -12,8 +12,12 @@
 # translation layer rather than a port, and the layer lives in Quark's tree
 # where it can talk to the servers that actually answer most of it.
 #
-# The patch is four files and no more, which is the interesting part: musl's
-# system call interface really is that narrow.
+# The patch is five files and no more, which is the interesting part: musl's
+# system call interface really is that narrow. Four of them are about issuing a
+# system call at all; the fifth is `clone`, which is the one place musl asks
+# the kernel for something Quark does not have the shape of — Linux has the
+# child *return from the same call* on a new stack, and Quark starts a task at
+# an entry point. That file becomes a tail call into the translation layer.
 set -e
 
 MUSL_SRC=${1:?usage: build-musl.sh <musl-src>}
