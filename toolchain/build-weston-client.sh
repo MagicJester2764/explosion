@@ -17,11 +17,26 @@ OUT=${2:-$PWD/clients}
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 mkdir -p "$OUT"
-INC="-I$WL_SRC/src -I$WL_SRC/build-quark/src"
+INC="-I$WL_SRC/src -I$WL_SRC/build-quark/src -I$OUT"
 LIB="$WL_SRC/build-quark/src/libwayland-client.a -lffi"
 
+# xdg-shell is a wayland-protocols extension rather than part of libwayland, so
+# its client stubs are generated here from the XML the host has. The scanner is
+# the one built alongside libwayland for the host -- generating with a different
+# version than the library was built against is how a client ends up calling
+# into interface structures laid out differently.
+SCANNER=$WL_SRC/build-native/src/wayland-scanner
+XDG_XML=${XDG_SHELL_XML:-/usr/share/qt6/wayland/protocols/xdg-shell/xdg-shell.xml}
+if [ ! -f "$XDG_XML" ]; then
+    echo "no xdg-shell.xml; set XDG_SHELL_XML" >&2
+    exit 1
+fi
+echo "==> xdg-shell stubs"
+"$SCANNER" client-header "$XDG_XML" "$OUT/xdg-shell-client-protocol.h"
+"$SCANNER" private-code  "$XDG_XML" "$OUT/xdg-shell-protocol.c"
+
 echo "==> wlprobe"
-x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" $INC $LIB
+x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" "$OUT/xdg-shell-protocol.c" $INC $LIB
 
 echo
 echo "built into $OUT; stage with"

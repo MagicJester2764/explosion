@@ -1,14 +1,15 @@
-/* What a Wayland client does before it draws anything.
+/* A Wayland client, end to end: connect, bind, make a buffer, become a window,
+ * and draw until the compositor stops asking for more.
  *
- * Upstream libwayland, unmodified: it connects through WAYLAND_SOCKET, asks
- * for the registry, binds what it finds, and makes a buffer pool out of
- * memory the compositor will read directly. Every step prints, because a
- * Wayland client that gets something wrong does not fail where it went wrong
- * — it waits.
+ * Upstream libwayland, unmodified, plus the xdg-shell stubs generated from
+ * wayland-protocols' own XML. That is the whole point of this program — every
+ * byte on the wire is written by the same code that writes it on Linux, so
+ * anything it finds is a compositor bug rather than a disagreement about what
+ * Wayland is.
  *
- * A roundtrip returning a count rather than -1 means the loop closed: the
- * client marshalled a request, the compositor parsed it off a stream and
- * answered, and the client's own dispatch believed the answer.
+ * It prints at every stage. A Wayland client that gets something wrong does not
+ * fail where it went wrong; it waits, and a stage marker is the difference
+ * between knowing which call stopped and guessing.
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
@@ -18,47 +19,59 @@
 #include <unistd.h>
 #include <wayland-client.h>
 
-#define W 200
-#define H 150
+#include "xdg-shell-client-protocol.h"
+
+#define W 320
+#define H 240
 #define STRIDE (W * 4)
 #define POOL_SIZE (STRIDE * H)
+/* Two buffers, so that one can be drawn into while the compositor reads the
+   other -- which is what wl_buffer.release exists to make safe. */
+#define BUFFERS 2
 
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
+static struct xdg_wm_base *wm_base;
 static uint32_t formats;
-static int count;
+static int globals;
+
+static struct wl_buffer *buffers[BUFFERS];
+static void *pixels[BUFFERS];
+static int busy[BUFFERS];
+
+static int configured;
+static int frames;
+static int releases;
 
 static void global(void *data, struct wl_registry *r, uint32_t name,
                    const char *iface, uint32_t version) {
     (void)data;
     printf("  global %u: %s v%u\n", name, iface, version);
-    count++;
+    globals++;
     if (strcmp(iface, "wl_compositor") == 0) {
         compositor = wl_registry_bind(r, name, &wl_compositor_interface, 1);
     } else if (strcmp(iface, "wl_shm") == 0) {
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
+    } else if (strcmp(iface, "xdg_wm_base") == 0) {
+        wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
     }
 }
 
 static void global_remove(void *data, struct wl_registry *r, uint32_t name) {
-    (void)data;
-    (void)r;
-    (void)name;
+    (void)data; (void)r; (void)name;
 }
 
-static const struct wl_registry_listener listener = { global, global_remove };
+static const struct wl_registry_listener registry_listener = { global, global_remove };
 
 static void shm_format(void *data, struct wl_shm *s, uint32_t format) {
-    (void)data;
-    (void)s;
-    printf("  format %u\n", format);
+    (void)data; (void)s;
     formats++;
 }
 
 static const struct wl_shm_listener shm_listener = { shm_format };
 
-/* Why the connection died. libwayland keeps this after a failed roundtrip, and
-   without printing it a protocol error looks exactly like a hang. */
+/* Why the connection died. Without printing it, a protocol error looks exactly
+   like a hang. */
 static void why(struct wl_display *d) {
     int e = wl_display_get_error(d);
     if (!e) {
@@ -71,10 +84,98 @@ static void why(struct wl_display *d) {
            iface ? iface->name : "(none)", id, code);
 }
 
+static void surface_configure(void *data, struct xdg_surface *s, uint32_t serial) {
+    (void)data;
+    xdg_surface_ack_configure(s, serial);
+    configured = 1;
+    printf("configure: serial %u, acked\n", serial);
+}
+
+static const struct xdg_surface_listener surface_listener = { surface_configure };
+
+static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w,
+                               int32_t h, struct wl_array *states) {
+    (void)data; (void)t; (void)states;
+    printf("toplevel configure: %dx%d\n", w, h);
+}
+
+static void toplevel_close(void *data, struct xdg_toplevel *t) {
+    (void)data; (void)t;
+}
+
+static const struct xdg_toplevel_listener toplevel_listener = {
+    toplevel_configure, toplevel_close,
+};
+
+static void buffer_release(void *data, struct wl_buffer *b) {
+    (void)b;
+    busy[(int)(long)data] = 0;
+    releases++;
+}
+
+static const struct wl_buffer_listener buffer_listener = { buffer_release };
+
+static void frame_done(void *data, struct wl_callback *c, uint32_t time);
+static const struct wl_callback_listener frame_listener = { frame_done };
+
+static struct wl_surface *surface;
+
+/* Fill a buffer with something that moves, so a screendump shows whether the
+   compositor is showing this frame or an older one. */
+static void paint(int n, int tick) {
+    uint32_t *px = pixels[n];
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            int v = (x + y + tick * 8) & 0xFF;
+            px[y * W + x] = 0xFF000000u | ((uint32_t)v << 16) | ((uint32_t)(255 - v) << 8) | 0x80;
+        }
+    }
+}
+
+static int free_buffer(void) {
+    for (int i = 0; i < BUFFERS; i++) {
+        if (!busy[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void draw(int tick) {
+    int n = free_buffer();
+    if (n < 0) {
+        return; /* both still held: the compositor has not released one yet */
+    }
+    paint(n, tick);
+    busy[n] = 1;
+    wl_surface_attach(surface, buffers[n], 0, 0);
+    wl_surface_damage(surface, 0, 0, W, H);
+    struct wl_callback *cb = wl_surface_frame(surface);
+    wl_callback_add_listener(cb, &frame_listener, NULL);
+    wl_surface_commit(surface);
+}
+
+static void frame_done(void *data, struct wl_callback *c, uint32_t time) {
+    (void)data; (void)time;
+    wl_callback_destroy(c);
+    frames++;
+    /* Periodically rather than at the end: the compositor is drawing over this
+       console, so these lines are read in scrollback afterwards -- and there is
+       no "afterwards" for a client the session takes with it when it closes. */
+    if (frames % 60 == 0) {
+        printf("frames: %d releases: %d\n", frames, releases);
+    }
+    draw(frames);
+}
+
+static void wm_base_ping(void *data, struct xdg_wm_base *b, uint32_t serial) {
+    (void)data;
+    xdg_wm_base_pong(b, serial);
+}
+
+static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
+
 int main(void) {
-    /* Unbuffered: this prints onto a console the compositor is drawing over,
-       and a line still sitting in a FILE buffer when something later hangs is
-       a line you never see. */
     setvbuf(stdout, NULL, _IONBF, 0);
 
     struct wl_display *d = wl_display_connect(NULL);
@@ -83,57 +184,63 @@ int main(void) {
         return 1;
     }
     struct wl_registry *r = wl_display_get_registry(d);
-    wl_registry_add_listener(r, &listener, NULL);
+    wl_registry_add_listener(r, &registry_listener, NULL);
     printf("roundtrip: %d\n", wl_display_roundtrip(d));
-    printf("globals: %d compositor: %s shm: %s\n", count,
-           compositor ? "OK" : "NULL", shm ? "OK" : "NULL");
-    if (!compositor || !shm) {
+    printf("globals: %d compositor:%s shm:%s wm_base:%s\n", globals,
+           compositor ? "OK" : "NULL", shm ? "OK" : "NULL", wm_base ? "OK" : "NULL");
+    if (!compositor || !shm || !wm_base) {
         return 1;
     }
-
+    xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
     wl_shm_add_listener(shm, &shm_listener, NULL);
-    printf("formats roundtrip: %d\n", wl_display_roundtrip(d));
+    wl_display_roundtrip(d);
     printf("formats: %u\n", formats);
 
-    /* The pool the way every client makes one: unnamed memory, sized after
-       the fact, mapped here and handed over as a descriptor. */
+    /* The pool, the way every client makes one. */
     int fd = memfd_create("wlprobe", 0);
-    printf("memfd: %d\n", fd);
-    if (fd < 0) {
+    if (fd < 0 || ftruncate(fd, POOL_SIZE * BUFFERS) < 0) {
+        printf("memfd: FAILED\n");
         return 1;
     }
-    printf("ftruncate: %d\n", ftruncate(fd, POOL_SIZE));
-    void *px = mmap(NULL, POOL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    printf("mmap: %s\n", px == MAP_FAILED ? "FAILED" : "OK");
-    if (px == MAP_FAILED) {
+    void *base = mmap(NULL, POOL_SIZE * BUFFERS, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) {
+        printf("mmap: FAILED\n");
         return 1;
     }
-    /* Something recognisable, so a later task can tell the compositor drew the
-       client's pixels rather than its own idea of them. */
-    for (int y = 0; y < H; y++) {
-        uint32_t *row = (uint32_t *)((char *)px + y * STRIDE);
-        for (int x = 0; x < W; x++) {
-            row[x] = 0xFF000000u | ((uint32_t)x << 16) | ((uint32_t)y << 8) | 0x40;
-        }
+    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, POOL_SIZE * BUFFERS);
+    for (int i = 0; i < BUFFERS; i++) {
+        pixels[i] = (char *)base + i * POOL_SIZE;
+        buffers[i] = wl_shm_pool_create_buffer(pool, i * POOL_SIZE, W, H, STRIDE,
+                                               WL_SHM_FORMAT_XRGB8888);
+        wl_buffer_add_listener(buffers[i], &buffer_listener, (void *)(long)i);
+    }
+    printf("pool: %d buffers\n", BUFFERS);
+
+    /* A surface with a role, and nothing shown until the size is agreed. */
+    surface = wl_compositor_create_surface(compositor);
+    struct xdg_surface *xs = xdg_wm_base_get_xdg_surface(wm_base, surface);
+    xdg_surface_add_listener(xs, &surface_listener, NULL);
+    struct xdg_toplevel *top = xdg_surface_get_toplevel(xs);
+    xdg_toplevel_add_listener(top, &toplevel_listener, NULL);
+    xdg_toplevel_set_title(top, "wlprobe");
+    wl_surface_commit(surface);
+
+    printf("configure roundtrip: %d\n", wl_display_roundtrip(d));
+    why(d);
+    printf("configured: %d\n", configured);
+    if (!configured) {
+        return 1;
     }
 
-    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, POOL_SIZE);
-    printf("pool: %s\n", pool ? "OK" : "NULL");
-    struct wl_buffer *buf =
-        wl_shm_pool_create_buffer(pool, 0, W, H, STRIDE, WL_SHM_FORMAT_XRGB8888);
-    printf("buffer: %s\n", buf ? "OK" : "NULL");
-    printf("pool roundtrip: %d\n", wl_display_roundtrip(d));
+    draw(0);
+    /* Until the compositor goes away, which is what closing the session does.
+       Drawing for a fixed count instead would leave nothing on the screen to
+       photograph, and a compositor is a thing you have to look at. */
+    while (wl_display_dispatch(d) != -1) {
+        ;
+    }
+    printf("frames: %d releases: %d\n", frames, releases);
     why(d);
-
-    /* And the check that matters: a buffer that does not fit must be refused
-       rather than composited out of memory that is not there. */
-    struct wl_buffer *bad =
-        wl_shm_pool_create_buffer(pool, POOL_SIZE - 4, W, H, STRIDE,
-                                  WL_SHM_FORMAT_XRGB8888);
-    (void)bad;
-    printf("overrun roundtrip: %d (want -1)\n", wl_display_roundtrip(d));
-    why(d);
-
     wl_display_disconnect(d);
     return 0;
 }
