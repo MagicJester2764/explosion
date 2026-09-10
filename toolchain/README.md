@@ -133,3 +133,42 @@ quarters of 54 MB and the root filesystem is 33. Quark's own userland keeps its
 names: `ls` here would be coreutils' `ls`, which wants `getdents64`, while the
 in-tree one lists a directory over the VFS protocol and works. With `COREUTILS`
 unset the staging step takes back anything a previous one put there.
+
+## libffi and libwayland
+
+Both build for `x86_64-quark`, and libwayland needs no patch at all. That was
+the largest unknown in Phase 8 and it turned out to be mostly a toolchain
+question rather than a porting one.
+
+`build-libffi.sh` needs one hunk: `config.sub` learning that quark is an
+operating system, the same hunk every autoconf package wants. The x86-64
+assembly, the closure machinery, all of it cross-compiles unmodified.
+
+`build-wayland.sh` runs meson twice — once natively for `wayland-scanner`,
+because a cross build still needs a scanner that runs on *this* machine, and
+once cross for the libraries. `libwayland-client.a` and, unexpectedly,
+`libwayland-server.a` both build clean.
+
+Three things had to change on our side, and each was a real gap rather than a
+workaround:
+
+- **`-pthread` is dropped by the wrapper.** It asks for a separate threading
+  library and a feature macro; musl has neither, because threads are in libc.
+  The driver would otherwise refuse an option it has no target handling for,
+  which stops any build system that asks for threads the ordinary way.
+- **musl's stub archives had to be findable.** musl ships empty `librt.a`,
+  `libpthread.a`, `libm.a` and friends, since their contents are all inside
+  `libc.a` — but the specs named `libc.a` by path and added no `-L`, so `-lrt`
+  failed to find a library whose contents were already linked.
+- **Two C libraries must not share an include directory.** libffi installed
+  into the sysroot, pkg-config reported that as its `includedir`, meson turned
+  it into `-I`, and `-I` beats `-isystem` — so `<fcntl.h>` resolved to Quark's
+  own C library instead of musl's and every file wanting `fcntl` stopped
+  compiling. Anything built for musl installs into musl's prefix now.
+
+**Where it stops.** A musl program links libwayland, and
+`wl_display_connect_to_fd` succeeds on a socketpair — so `WAYLAND_SOCKET`,
+descriptor passing and the connection setup all work. It dies at
+`wl_display_get_registry`, the first call that marshals a protocol message.
+That is where Phase 8's implementation starts, and it is a much more precise
+place to start than "port libwayland".

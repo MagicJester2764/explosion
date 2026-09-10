@@ -61,13 +61,36 @@ $PREFIX/lib/crtn.o
 
 *lib:
 $PREFIX/lib/libc.a $QUARK_SRC/user/linux-abi/liblinux-abi.a
+
+# musl ships empty archives for the libraries Unix split out and it did not:
+# librt, libpthread, libm, libdl and the rest are all inside libc.a. Somebody
+# else's build system will still pass -lrt or -lpthread, so the directory
+# holding those stubs has to be searchable — otherwise the link fails looking
+# for a library whose contents are already present.
+#
+# link_libgcc rather than link, because this must precede the user's own -l
+# flags on the command line and that spec does.
+%rename link_libgcc old_link_libgcc
+
+*link_libgcc:
+-L$PREFIX/lib %(old_link_libgcc)
 SPECS
 
 BINDIR=$(dirname "$(command -v x86_64-quark-gcc)")
 cat > "$BINDIR/x86_64-quark-musl-gcc" <<WRAP
 #!/bin/sh
 # x86_64-quark, with musl as its C library.
-exec x86_64-quark-gcc -specs="$PREFIX/lib/musl-quark.specs" "\$@"
+#
+# -pthread is dropped rather than passed on. It asks for a separate threading
+# library and a feature macro, and musl has neither: threads are in libc. The
+# driver would otherwise refuse an option it has no target handling for, which
+# stops any build system that asks for threads the usual way.
+args=""
+for a in "\$@"; do
+	[ "\$a" = "-pthread" ] && continue
+	args="\$args \"\$a\""
+done
+eval exec x86_64-quark-gcc -specs=\"$PREFIX/lib/musl-quark.specs\" \$args
 WRAP
 chmod +x "$BINDIR/x86_64-quark-musl-gcc"
 
