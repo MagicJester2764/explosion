@@ -179,9 +179,24 @@ static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t format,
                       int32_t fd, uint32_t size) {
     (void)d; (void)k;
     printf("keymap: format %u size %u fd %d\n", format, size, fd);
-    if (fd >= 0) {
-        close(fd);
+    if (fd < 0) {
+        return;
     }
+    /* Mapped rather than merely closed: the descriptor arriving proves the
+       passing works, and only reading it proves there is a keymap in it. */
+    char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+        printf("keymap: mmap FAILED\n");
+    } else {
+        int n = 0;
+        while (n < (int)size && map[n] != '\n') {
+            n++;
+        }
+        printf("keymap: %.*s\n", n, map);
+        printf("keymap: last byte %d\n", map[size - 1]);
+        munmap(map, size);
+    }
+    close(fd);
 }
 
 static void kb_enter(void *d, struct wl_keyboard *k, uint32_t serial,
