@@ -32,6 +32,8 @@
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct xdg_wm_base *wm_base;
+static struct wl_seat *seat;
+static struct wl_keyboard *keyboard;
 static uint32_t formats;
 static int globals;
 
@@ -54,6 +56,8 @@ static void global(void *data, struct wl_registry *r, uint32_t name,
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     } else if (strcmp(iface, "xdg_wm_base") == 0) {
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
+    } else if (strcmp(iface, "wl_seat") == 0) {
+        seat = wl_registry_bind(r, name, &wl_seat_interface, 4);
     }
 }
 
@@ -168,6 +172,53 @@ static void frame_done(void *data, struct wl_callback *c, uint32_t time) {
     draw(frames);
 }
 
+/* The keyboard half of a seat. Printed rather than acted on: what is being
+   tested is that the events arrive at all, with the right codes and in the
+   right order. */
+static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t format,
+                      int32_t fd, uint32_t size) {
+    (void)d; (void)k;
+    printf("keymap: format %u size %u fd %d\n", format, size, fd);
+    if (fd >= 0) {
+        close(fd);
+    }
+}
+
+static void kb_enter(void *d, struct wl_keyboard *k, uint32_t serial,
+                     struct wl_surface *s, struct wl_array *keys) {
+    (void)d; (void)k; (void)s; (void)keys;
+    printf("enter: serial %u\n", serial);
+}
+
+static void kb_leave(void *d, struct wl_keyboard *k, uint32_t serial,
+                     struct wl_surface *s) {
+    (void)d; (void)k; (void)s;
+    printf("leave: serial %u\n", serial);
+}
+
+static void kb_key(void *d, struct wl_keyboard *k, uint32_t serial,
+                   uint32_t time, uint32_t key, uint32_t state) {
+    (void)d; (void)k; (void)time;
+    printf("key: serial %u code %u %s\n", serial, key, state ? "down" : "up");
+}
+
+static void kb_modifiers(void *d, struct wl_keyboard *k, uint32_t serial,
+                         uint32_t dep, uint32_t lat, uint32_t lck,
+                         uint32_t group) {
+    (void)d; (void)k; (void)serial; (void)lat; (void)group;
+    printf("mods: depressed %u locked %u\n", dep, lck);
+}
+
+static void kb_repeat(void *d, struct wl_keyboard *k, int32_t rate,
+                      int32_t delay) {
+    (void)d; (void)k;
+    printf("repeat: %d/s after %dms\n", rate, delay);
+}
+
+static const struct wl_keyboard_listener kb_listener = {
+    kb_keymap, kb_enter, kb_leave, kb_key, kb_modifiers, kb_repeat,
+};
+
 static void wm_base_ping(void *data, struct xdg_wm_base *b, uint32_t serial) {
     (void)data;
     xdg_wm_base_pong(b, serial);
@@ -186,8 +237,9 @@ int main(void) {
     struct wl_registry *r = wl_display_get_registry(d);
     wl_registry_add_listener(r, &registry_listener, NULL);
     printf("roundtrip: %d\n", wl_display_roundtrip(d));
-    printf("globals: %d compositor:%s shm:%s wm_base:%s\n", globals,
-           compositor ? "OK" : "NULL", shm ? "OK" : "NULL", wm_base ? "OK" : "NULL");
+    printf("globals: %d compositor:%s shm:%s wm_base:%s seat:%s\n", globals,
+           compositor ? "OK" : "NULL", shm ? "OK" : "NULL",
+           wm_base ? "OK" : "NULL", seat ? "OK" : "NULL");
     if (!compositor || !shm || !wm_base) {
         return 1;
     }
@@ -230,6 +282,12 @@ int main(void) {
     printf("configured: %d\n", configured);
     if (!configured) {
         return 1;
+    }
+
+    if (seat) {
+        keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(keyboard, &kb_listener, NULL);
+        wl_display_roundtrip(d);
     }
 
     draw(0);
