@@ -1,0 +1,2 @@
+# FreeType, reading a font off the disk. Expected: all passed.
+fttest

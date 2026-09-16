@@ -20,7 +20,9 @@ OVMF_PATH ?= $(BANG_DIR)/firmware-redist/ovmf
 
 STAGE := stage
 
-ROOTFS_SIZE_KB  := 33792
+# Room for the fonts and the font stack's programs and tests; 33 MiB was
+# nearly full without them.
+ROOTFS_SIZE_KB  := 65536
 BOOT_IMG_SIZE_KB := 1024
 
 BOOT_IMG        := boot.img
@@ -53,6 +55,12 @@ WAYLAND_CLIENTS ?=
 # `toolchain/build-tests.sh` and the port build scripts. Space-separated; each
 # contributes its executables to /usr/bin and its `*.tests` files to /etc.
 TEST_SUITES     ?=
+
+# Directories laid out like the root filesystem — usr/share/fonts, etc/fonts,
+# var/cache — as made by `toolchain/stage-fonts.sh` and the port build
+# scripts. Space-separated; each is copied over the stage as it is, names and
+# all, and a later stage without it takes its files back out.
+ROOT_OVERLAYS   ?=
 
 .PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
@@ -101,6 +109,8 @@ stage: FORCE
 		done; \
 		echo "tests: staged $$n programs from $$d"; \
 	done
+	@# Runs either way, like stage-coreutils.sh, so unsetting it un-stages.
+	@./tools/stage-overlays.sh $(STAGE) $(ROOT_OVERLAYS)
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------
@@ -115,7 +125,8 @@ $(BOOT_IMG): stage
 		mcopy -i $(CURDIR)/$(BOOT_IMG) "$$f" "::$$f"; \
 	done
 
-# FAT32 root. Names keep their case here; the ext2 path below does not.
+# FAT32 root. Names keep their case here, and a long one gets a short alias
+# that is all Quark's FAT32 reads.
 $(ROOTFS_IMG): stage
 	dd if=/dev/zero of=$(ROOTFS_IMG) bs=1k count=$(ROOTFS_SIZE_KB) status=none
 	mformat -i $(ROOTFS_IMG) -F ::
@@ -127,8 +138,8 @@ $(ROOTFS_IMG): stage
 		mcopy -i $(CURDIR)/$(ROOTFS_IMG) "$$f" "::$$f"; \
 	done
 
-# An ext2 or ext4 root. Names are lowercased and the .ELF suffix dropped,
-# because that is what the shell and init look for on these filesystems.
+# An ext2 or ext4 root, filled from the stage by tools/populate-ext.sh, which
+# also gives Quark's own programs the names the shell and init look for there.
 #
 # One recipe for both: the two differ in the mkfs invocation and nothing else,
 # since debugfs speaks to either and the directory layout is the same. $(1) is
@@ -141,27 +152,7 @@ define ROOTFS_RULE
 $(1): stage
 	dd if=/dev/zero of=$(1) bs=1k count=$$(ROOTFS_SIZE_KB) status=none
 	$(2) $(1)
-	debugfs -w -R "mkdir usr" $(1) >/dev/null 2>&1
-	debugfs -w -R "mkdir usr/bin" $(1) >/dev/null 2>&1
-	debugfs -w -R "mkdir etc" $(1) >/dev/null 2>&1
-	debugfs -w -R "mkdir home" $(1) >/dev/null 2>&1
-	debugfs -w -R "mkdir home/root" $(1) >/dev/null 2>&1
-	debugfs -w -R "mkdir tmp" $(1) >/dev/null 2>&1
-	@cd $$(STAGE) && find usr etc -type f | while read f; do \
-		target=$$$$(echo "$$$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$$$//'); \
-		debugfs -w -R "write $$$$f $$$$target" $$(CURDIR)/$(1) >/dev/null 2>&1; \
-	done
-	@# debugfs reports failure on stderr and still exits 0, so a write that
-	@# does not land is otherwise invisible: the image simply boots without
-	@# that program. Check every staged file arrived rather than trusting it.
-	@cd $$(STAGE) && missing=0; for f in `find usr etc -type f`; do \
-		target=$$$$(echo "$$$$f" | tr '[:upper:]' '[:lower:]' | sed 's/\.elf$$$$//'); \
-		if debugfs -R "stat $$$$target" $$(CURDIR)/$(1) 2>&1 | grep -q 'File not found'; then \
-			echo "  MISSING from $(1): $$$$target (staged as $$$$f)" >&2; \
-			missing=1; \
-		fi; \
-	done; \
-	if [ $$$$missing -ne 0 ]; then echo "$(1) is incomplete" >&2; exit 1; fi
+	./tools/populate-ext.sh $(1) $$(STAGE)
 endef
 
 $(eval $(call ROOTFS_RULE,$(ROOTFS_EXT2_IMG),mkfs.ext2 -b 1024 -F -q))
