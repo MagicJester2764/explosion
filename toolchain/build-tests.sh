@@ -11,13 +11,26 @@
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${1:-$PWD/tests-out}
+PREFIX=${PREFIX:-$HOME/opt/cross/x86_64-quark/musl}
 mkdir -p "$OUT"
 # A test that links a ported library says so on its first line:
 #     // LINK: -lcairo -lpixman-1 -lm
-# which keeps what each test needs next to the test rather than in here.
+# which keeps what each test needs next to the test rather than in here. One
+# whose library is not built yet is skipped, and says so, rather than stopping
+# the tests that need nothing.
 for src in "$HERE"/tests/*.c; do
     name=$(basename "$src" .c)
     flags=$(sed -n '1s|^// LINK: ||p' "$src")
+    missing=
+    for f in $flags; do
+        case $f in
+        -l*) [ -e "$PREFIX/lib/lib${f#-l}.a" ] || missing="$missing ${f#-l}" ;;
+        esac
+    done
+    if [ -n "$missing" ]; then
+        echo "==> $name skipped, not built yet:$missing"
+        continue
+    fi
     echo "==> $name"
     x86_64-quark-musl-gcc -O2 -o "$OUT/$name" "$src" $flags
 done
