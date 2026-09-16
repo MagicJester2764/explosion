@@ -1,0 +1,8 @@
+# zlib: ours, then zlib's own. Expected: all passed.
+ztest
+# example leaves the gzip file it names; minigzip overwrites and removes it.
+example /tmp/zdata.gz
+ztest prepare
+minigzip /tmp/zdata
+minigzip -d /tmp/zdata.gz
+ztest verify

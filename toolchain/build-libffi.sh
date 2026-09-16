@@ -14,23 +14,13 @@
 # file that wanted fcntl stopped compiling. Two C libraries must not share an
 # include directory.
 set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 FFI_SRC=${1:?usage: build-libffi.sh <libffi-src>}
 PREFIX=${PREFIX:-$HOME/opt/cross/x86_64-quark/musl}
 
 cd "$FFI_SRC"
-if ! grep -q 'quark\*' config.sub; then
-    echo "==> teaching config.sub about quark"
-    sed -i 's|\(\t     | nsk\* .* | zephyr\* \\\)|\1\n\t     | quark* \\|' config.sub || \
-    python3 - "$PWD/config.sub" <<'PY'
-import sys
-p = sys.argv[1]
-s = open(p).read()
-a = "\t     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \\\n"
-assert s.count(a) == 1, "config.sub OS list not found; libffi may have changed"
-open(p, "w").write(s.replace(a, a + "\t     | quark* \\\n"))
-PY
-fi
+sh "$HERE/teach-config-sub.sh" config.sub
 
 ./configure --host=x86_64-quark --prefix="$PREFIX" \
     CC=x86_64-quark-musl-gcc --disable-shared --disable-docs

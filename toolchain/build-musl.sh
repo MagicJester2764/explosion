@@ -95,12 +95,26 @@ cat > "$BINDIR/x86_64-quark-musl-gcc" <<WRAP
 # library and a feature macro, and musl has neither: threads are in libc. The
 # driver would otherwise refuse an option it has no target handling for, which
 # stops any build system that asks for threads the usual way.
-args=""
-for a in "\$@"; do
-	[ "\$a" = "-pthread" ] && continue
-	args="\$args \"\$a\""
+#
+# -fPIC, -fpic, -fPIE, -fpie and -pie are dropped too. Nothing here is a
+# shared library or a position-independent executable, and with the large
+# code model a program built -fPIC reaches its globals through a GOT whose
+# base it never sets up: their addresses come out as zero. libwayland found
+# that; zlib's configure adds -fPIC whatever it is told.
+#
+# The list is rotated rather than rebuilt with eval: an argument like
+# -DFOO="a b" loses its quoting the moment eval re-parses it.
+n=\$#
+while [ "\$n" -gt 0 ]; do
+	a=\$1
+	shift
+	n=\$((n - 1))
+	case "\$a" in
+	-pthread|-fPIC|-fpic|-fPIE|-fpie|-pie) ;;
+	*) set -- "\$@" "\$a" ;;
+	esac
 done
-eval exec x86_64-quark-gcc -specs=\"$PREFIX/lib/musl-quark.specs\" \$args
+exec x86_64-quark-gcc -specs="$PREFIX/lib/musl-quark.specs" "\$@"
 WRAP
 chmod +x "$BINDIR/x86_64-quark-musl-gcc"
 
