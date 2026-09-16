@@ -14,7 +14,9 @@
 #    not help when the literal name appears in the file. Kill by pid.
 #  - The timing lives inside the Python driver rather than in this shell,
 #    because a foreground `sleep` in an agent's tool call can be blocked.
-set -e
+#  - No `set -e`. Half of what this does is tidying up after a previous run
+#    that may not have happened, and a `[ -f pidfile ] && kill` whose test
+#    fails is enough to end the script before it starts the emulator.
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
 RUN=${RUNDIR:-${TMPDIR:-/tmp}/quark-boot-test}
