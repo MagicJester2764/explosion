@@ -1,0 +1,5 @@
+# The C library's own tests, one per lie a port has caught it telling.
+# Expected: all passed.
+tlstest
+ctortest
+mmaptest
