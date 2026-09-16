@@ -48,6 +48,10 @@ stubs "$PROTO_DIR/fullscreen-shell/fullscreen-shell-unstable-v1.xml" \
 stubs "$PROTO_DIR/xdg-decoration/xdg-decoration-unstable-v1.xml" \
       xdg-decoration-unstable-v1
 
+echo "==> wlclip"
+x86_64-quark-musl-gcc -O2 -o "$OUT/wlclip" "$HERE/wlclip.c" \
+    "$OUT/xdg-shell-protocol.c" $INC $LIB
+
 echo "==> wlprobe"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" \
     "$OUT/xdg-shell-protocol.c" "$OUT/xdg-decoration-unstable-v1-protocol.c" \
