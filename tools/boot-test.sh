@@ -26,10 +26,13 @@ mkdir -p "$RUN"
 rm -f "$RUN/qmp.sock" "$RUN/serial.log" "$2"
 
 cd "$TOP"
+# The firmware writes its variable store, and the one in bang is tracked. Boot
+# from a copy, so a test run does not leave the bootloader repository dirty.
+cp ../bang/firmware-redist/ovmf/OVMF_VARS.fd "$RUN/OVMF_VARS.fd"
 qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
-  -pflash ../bang/firmware-redist/ovmf/OVMF_VARS.fd \
+  -pflash "$RUN/OVMF_VARS.fd" \
   -hda hdimage.bin -display none \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &
