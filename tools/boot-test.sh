@@ -29,18 +29,25 @@ cd "$TOP"
 # The firmware writes its variable store, and the one in bang is tracked. Boot
 # from a copy, so a test run does not leave the bootloader repository dirty.
 cp ../bang/firmware-redist/ovmf/OVMF_VARS.fd "$RUN/OVMF_VARS.fd"
+# Something on the network to talk to: an echo server on this machine's
+# loopback, which the guest's user-mode network shows as 10.0.2.2:7007.
+[ -f "$RUN/echo.pid" ] && kill "$(cat "$RUN/echo.pid")" 2>/dev/null
+python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &
+echo $! > "$RUN/echo.pid"
 qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
   -hda hdimage.bin -display none \
+  -device rtl8139,netdev=n -netdev user,id=n \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &
 echo $! > "$RUN/qemu.pid"
 
 python3 "$HERE/drive-qemu.py" "$RUN/qmp.sock" "$1" || true
 kill "$(cat "$RUN/qemu.pid")" 2>/dev/null || true
-rm -f "$RUN/qemu.pid"
+kill "$(cat "$RUN/echo.pid")" 2>/dev/null || true
+rm -f "$RUN/qemu.pid" "$RUN/echo.pid"
 
 if grep -aq "KFAULT\|PANIC" "$RUN/serial.log" 2>/dev/null; then
     echo "KERNEL FAULT:"
