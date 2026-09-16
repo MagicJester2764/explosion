@@ -20,6 +20,7 @@
 #include <wayland-client.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 
 #define W 320
 #define H 240
@@ -35,6 +36,7 @@ static struct xdg_wm_base *wm_base;
 static struct wl_seat *seat;
 static struct wl_keyboard *keyboard;
 static struct wl_pointer *pointer;
+static struct zxdg_decoration_manager_v1 *decor;
 static int motions;
 static uint32_t formats;
 static int globals;
@@ -60,6 +62,9 @@ static void global(void *data, struct wl_registry *r, uint32_t name,
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
     } else if (strcmp(iface, "wl_seat") == 0) {
         seat = wl_registry_bind(r, name, &wl_seat_interface, 4);
+    } else if (strcmp(iface, "zxdg_decoration_manager_v1") == 0) {
+        decor = wl_registry_bind(r, name,
+                                 &zxdg_decoration_manager_v1_interface, 1);
     }
 }
 
@@ -279,6 +284,18 @@ static const struct wl_pointer_listener pt_listener = {
     pt_enter, pt_leave, pt_motion, pt_button, pt_axis,
 };
 
+static void decor_configure(void *d, struct zxdg_toplevel_decoration_v1 *z,
+                            uint32_t mode) {
+    (void)d; (void)z;
+    printf("decoration: %s\n",
+           mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE ? "server_side"
+                                                                : "client_side");
+}
+
+static const struct zxdg_toplevel_decoration_v1_listener decor_listener = {
+    decor_configure,
+};
+
 static void wm_base_ping(void *data, struct xdg_wm_base *b, uint32_t serial) {
     (void)data;
     xdg_wm_base_pong(b, serial);
@@ -335,6 +352,13 @@ int main(void) {
     struct xdg_toplevel *top = xdg_surface_get_toplevel(xs);
     xdg_toplevel_add_listener(top, &toplevel_listener, NULL);
     xdg_toplevel_set_title(top, "wlprobe");
+    if (decor) {
+        struct zxdg_toplevel_decoration_v1 *dz =
+            zxdg_decoration_manager_v1_get_toplevel_decoration(decor, top);
+        zxdg_toplevel_decoration_v1_add_listener(dz, &decor_listener, NULL);
+    } else {
+        printf("decoration: no manager\n");
+    }
     wl_surface_commit(surface);
 
     printf("configure roundtrip: %d\n", wl_display_roundtrip(d));

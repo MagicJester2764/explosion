@@ -45,9 +45,13 @@ echo "==> protocol stubs"
 stubs "$PROTO_DIR/xdg-shell/xdg-shell.xml" xdg-shell
 stubs "$PROTO_DIR/fullscreen-shell/fullscreen-shell-unstable-v1.xml" \
       fullscreen-shell-unstable-v1
+stubs "$PROTO_DIR/xdg-decoration/xdg-decoration-unstable-v1.xml" \
+      xdg-decoration-unstable-v1
 
 echo "==> wlprobe"
-x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" "$OUT/xdg-shell-protocol.c" $INC $LIB
+x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" \
+    "$OUT/xdg-shell-protocol.c" "$OUT/xdg-decoration-unstable-v1-protocol.c" \
+    $INC $LIB
 
 if [ -n "$WESTON_SRC" ]; then
     # weston-simple-shm, from Weston's tree and not touched.
