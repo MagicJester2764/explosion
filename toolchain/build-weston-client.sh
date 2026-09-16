@@ -18,6 +18,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # Weston's own tree, for the clients that come from it. Optional: without it
 # only wlprobe is built, and Quark still boots.
 WESTON_SRC=${WESTON_SRC:-}
+PREFIX=${PREFIX:-$HOME/opt/cross/x86_64-quark/musl}
 
 mkdir -p "$OUT"
 INC="-I$WL_SRC/src -I$WL_SRC/build-quark/src -I$OUT"
@@ -56,6 +57,16 @@ echo "==> wlprobe"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" \
     "$OUT/xdg-shell-protocol.c" "$OUT/xdg-decoration-unstable-v1-protocol.c" \
     $INC $LIB
+
+# Drawn with cairo, once build-cairo.sh has installed it. Linked without the
+# debug information cairo and pixman were built with, which is four fifths of
+# the file; the symbols stay, so a fault's address can still be named.
+if [ -f "$PREFIX/lib/libcairo.a" ]; then
+    echo "==> wlcairo"
+    x86_64-quark-musl-gcc -O2 -Wl,--strip-debug -o "$OUT/wlcairo" \
+        "$HERE/wlcairo.c" "$OUT/xdg-shell-protocol.c" \
+        $INC -lcairo -lpixman-1 -lm $LIB
+fi
 
 if [ -n "$WESTON_SRC" ]; then
     # weston-simple-shm, from Weston's tree and not touched.
