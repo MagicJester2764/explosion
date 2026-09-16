@@ -1,0 +1,4 @@
+# The runner's own test. Expected: 2 passed, 1 failed.
+echo hello
+echo world
+tlstest-does-not-exist

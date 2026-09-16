@@ -49,6 +49,11 @@ COREUTILS       ?=
 # install rather than a checkout.
 WAYLAND_CLIENTS ?=
 
+# Directories of test programs and the lists `runtests` reads, as made by
+# `toolchain/build-tests.sh` and the port build scripts. Space-separated; each
+# contributes its executables to /usr/bin and its `*.tests` files to /etc.
+TEST_SUITES     ?=
+
 .PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
@@ -79,6 +84,23 @@ stage: FORCE
 		done; \
 		echo "wayland: staged $$n clients"; \
 	fi
+	@# A test suite is a directory of programs and the lists runtests reads.
+	@# Programs go where commands go; a list goes to /etc under its own name.
+	@for d in $(TEST_SUITES); do \
+		n=0; \
+		for f in $$d/*; do \
+			[ -f "$$f" ] || continue; \
+			b=`basename $$f`; \
+			case "$$b" in \
+			*.tests) cp "$$f" $(STAGE)/etc/$$b ;; \
+			*) [ -x "$$f" ] || continue; \
+			   cp "$$f" $(STAGE)/usr/bin/$$b; \
+			   x86_64-quark-strip $(STAGE)/usr/bin/$$b 2>/dev/null || true; \
+			   n=$$((n + 1)) ;; \
+			esac; \
+		done; \
+		echo "tests: staged $$n programs from $$d"; \
+	done
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------
