@@ -1,0 +1,49 @@
+# pixman's own test suite, run by runtests on Quark.
+#
+# Every test that passes on the host with the same configuration — the generic
+# C path, no SIMD — each at its default iteration count, so that the fuzzers
+# (affine, blitters, cover, scaling, solid and the rest) compare against the
+# checksums built into them. On the host these take 77 seconds.
+#
+# stress-test asks, once in a while, for a 2.7 GB trapezoid mask it draws into
+# one corner of. Linux backs that as it is touched; Quark backs a mapping when
+# it is made, so the request is refused. pixman checks and skips the operation,
+# so the test passes having done a little less than it does on the host.
+#
+# Left out, and why:
+#   fence-image-self-test  needs mprotect(PROT_NONE) to fault and a SIGSEGV
+#                          handler to catch it; Quark has neither.
+#   check-formats          a tool that needs arguments, not a test.
+#   *-bench, radial-perf-test
+#                          measure rather than check.
+a1-trap-test
+affine-test
+alpha-loop
+alphamap
+blitters-test
+combiner-test
+composite-traps-test
+cover-test
+fetch-test
+filter-reduction-test
+glyph-test
+gradient-crash-test
+infinite-loop
+matrix-test
+oob-test
+pdf-op-test
+pixel-test
+prng-test
+radial-invalid
+region-contains-test
+region-test
+region-translate-test
+rotate-test
+scaling-crash-test
+scaling-helpers-test
+scaling-test
+solid-test
+stress-test
+thread-test
+tolerance-test
+trap-crasher
