@@ -1,0 +1,5 @@
+# fontconfig: the cache is written, then used. Expected: all passed.
+fc-cache -v
+fctest
+fc-list
+fc-match monospace

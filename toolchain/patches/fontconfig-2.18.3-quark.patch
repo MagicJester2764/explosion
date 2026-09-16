@@ -1,0 +1,18 @@
+fontconfig asks fstatfs what a directory's filesystem is, to know whether its
+modification times can be trusted (FAT's cannot) and whether a cache file on
+it is safe to map (NFS's is not). It reads Linux's f_type only when it knows
+it is on Linux, and otherwise stops the build. Quark's C library is musl,
+whose struct statfs is Linux's, and Quark fills f_type with the same magic
+numbers.
+
+--- a/src/fcstat.c
++++ b/src/fcstat.c
+@@ -372,7 +372,7 @@
+ #  endif
+ #  if defined(HAVE_STRUCT_STATFS_F_FSTYPENAME)
+ 	p = buf.f_fstypename;
+-#  elif defined(__linux__) || defined(__EMSCRIPTEN__)
++#  elif defined(__linux__) || defined(__EMSCRIPTEN__) || defined(__quark__)
+ 	switch (buf.f_type) {
+ 	case 0x6969: /* nfs */
+ 	    statb->is_remote_fs = FcTrue;
