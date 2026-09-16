@@ -1,9 +1,12 @@
 /* The file calls a ported program leans on, answered by Quark's VFS through
    the Linux translation layer. It removes everything it makes, and tolerates
    whatever a run that stopped half way left behind. */
+#define _GNU_SOURCE /* dup3 */
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -18,9 +21,9 @@ static void check(const char *what, int ok) {
     }
 }
 
-#define DIR    "/tmp/filetest-a-directory-with-a-name-past-the-old-limit"
-#define FILE_A DIR "/a-file-whose-whole-path-is-well-over-forty-seven-bytes"
-#define FILE_B DIR "/another"
+#define TESTDIR    "/tmp/filetest-a-directory-with-a-name-past-the-old-limit"
+#define FILE_A TESTDIR "/a-file-whose-whole-path-is-well-over-forty-seven-bytes"
+#define FILE_B TESTDIR "/another"
 
 static int put(const char *path, int flags, const char *text) {
     int fd = open(path, flags, 0644);
@@ -34,21 +37,33 @@ static int put(const char *path, int flags, const char *text) {
 
 /* What a run that stopped part way may have left. Errors are expected. */
 static void clear_leftovers(void) {
-    unlink(DIR "/sub/inner");
-    rmdir(DIR "/sub");
-    unlink(DIR "/sub-renamed/inner");
-    rmdir(DIR "/sub-renamed");
-    unlink(DIR "/gone");
-    unlink(DIR "/moved");
+    unlink(TESTDIR "/sub/inner");
+    rmdir(TESTDIR "/sub");
+    unlink(TESTDIR "/sub-renamed/inner");
+    rmdir(TESTDIR "/sub-renamed");
+    unlink(TESTDIR "/gone");
+    unlink(TESTDIR "/moved");
     unlink(FILE_B);
+    DIR *d = opendir(TESTDIR);
+    struct dirent *e;
+    char path[512];
+    while (d && (e = readdir(d))) {
+        if (!strncmp(e->d_name, "lock-", 5)) {
+            snprintf(path, sizeof path, TESTDIR "/%s", e->d_name);
+            unlink(path);
+        }
+    }
+    if (d) {
+        closedir(d);
+    }
 }
 
 int main(void) {
     printf("files:\n");
     clear_leftovers();
-    int r = mkdir(DIR, 0755);
+    int r = mkdir(TESTDIR, 0755);
     check("make a directory with a long name", r == 0 || errno == EEXIST);
-    check("making it again says it exists", mkdir(DIR, 0755) == -1 && errno == EEXIST);
+    check("making it again says it exists", mkdir(TESTDIR, 0755) == -1 && errno == EEXIST);
     check("create a file with a long path", put(FILE_A, O_WRONLY | O_CREAT, "0123456789") == 0);
 
     int fd = open(FILE_A, O_RDWR | O_CREAT, 0644);
@@ -61,7 +76,7 @@ int main(void) {
     check("O_EXCL refuses one that exists", fd == -1 && errno == EEXIST);
     fd = open(FILE_A, O_RDONLY | O_DIRECTORY);
     check("O_DIRECTORY refuses a file", fd == -1 && errno == ENOTDIR);
-    fd = open(DIR, O_WRONLY);
+    fd = open(TESTDIR, O_WRONLY);
     check("a directory cannot be opened to write", fd == -1 && errno == EISDIR);
 
     struct stat a1, a2, b, d, f;
@@ -70,17 +85,17 @@ int main(void) {
     check("twice, and it is the same inode", stat(FILE_A, &a2) == 0 && a1.st_ino == a2.st_ino);
     check("another file is another inode", stat(FILE_B, &b) == 0 && b.st_ino != a1.st_ino);
     check("a file has a link", a1.st_nlink >= 1);
-    check("stat a directory", stat(DIR, &d) == 0 && S_ISDIR(d.st_mode) && d.st_nlink >= 2);
+    check("stat a directory", stat(TESTDIR, &d) == 0 && S_ISDIR(d.st_mode) && d.st_nlink >= 2);
     time_t now = time(NULL);
     check("a file written now is dated now", a1.st_mtime <= now && now - a1.st_mtime < 600);
     fd = open(FILE_A, O_RDONLY);
     check("fstat agrees with stat", fd >= 0 && fstat(fd, &f) == 0 && f.st_ino == a1.st_ino);
     close(fd);
 
-    char longname[sizeof DIR + 300];
-    memcpy(longname, DIR "/", sizeof DIR);
-    memset(longname + sizeof DIR, 'x', 260);
-    longname[sizeof DIR + 260] = 0;
+    char longname[sizeof TESTDIR + 300];
+    memcpy(longname, TESTDIR "/", sizeof TESTDIR);
+    memset(longname + sizeof TESTDIR, 'x', 260);
+    longname[sizeof TESTDIR + 260] = 0;
     fd = open(longname, O_WRONLY | O_CREAT, 0644);
     check("a name longer than 255 bytes is refused", fd == -1 && errno == ENAMETOOLONG);
 
@@ -105,7 +120,7 @@ int main(void) {
     check("and a write into the gap lands", fd >= 0 && lseek(fd, 4096, SEEK_SET) == 4096 && write(fd, "z", 1) == 1);
     close(fd);
 
-    #define GONE DIR "/gone"
+    #define GONE TESTDIR "/gone"
     put(GONE, O_WRONLY | O_CREAT, "soon");
     fd = open(GONE, O_RDONLY);
     check("unlink a file", unlink(GONE) == 0);
@@ -114,10 +129,10 @@ int main(void) {
     check("an open handle still reads it", fd >= 0 && read(fd, buf, 4) == 4 && !memcmp(buf, "soon", 4));
     close(fd);
     check("unlinking it again says so", unlink(GONE) == -1 && errno == ENOENT);
-    check("unlink refuses a directory", unlink(DIR) == -1 && errno == EISDIR);
-    check("link is not offered", link(FILE_A, DIR "/hard") == -1 && errno == EPERM);
+    check("unlink refuses a directory", unlink(TESTDIR) == -1 && errno == EISDIR);
+    check("link is not offered", link(FILE_A, TESTDIR "/hard") == -1 && errno == EPERM);
 
-    #define MOVED DIR "/moved"
+    #define MOVED TESTDIR "/moved"
     unlink(MOVED);
     struct stat before;
     stat(FILE_B, &before);
@@ -127,8 +142,8 @@ int main(void) {
     put(FILE_B, O_WRONLY | O_CREAT, "replacement");
     check("rename over a file replaces it", rename(MOVED, FILE_B) == 0 && stat(FILE_B, &f) == 0 && f.st_ino == before.st_ino && f.st_size == 1);
 
-    #define SUB DIR "/sub"
-    #define SUB2 DIR "/sub-renamed"
+    #define SUB TESTDIR "/sub"
+    #define SUB2 TESTDIR "/sub-renamed"
     mkdir(SUB, 0755);
     put(SUB "/inner", O_WRONLY | O_CREAT, "x");
     check("rmdir refuses a directory with something in it", rmdir(SUB) == -1 && errno == ENOTEMPTY);
@@ -137,7 +152,33 @@ int main(void) {
     check("empty it", unlink(SUB2 "/inner") == 0);
     check("then rmdir removes it", rmdir(SUB2) == 0 && stat(SUB2, &f) == -1 && errno == ENOENT);
 
-    check("tidy up", unlink(FILE_A) == 0 && unlink(FILE_B) == 0 && rmdir(DIR) == 0);
+    printf("second descriptors:\n");
+    fd = open(FILE_A, O_RDWR);
+    int copy = fd >= 0 ? dup(fd) : -1;
+    check("dup a file", copy >= 0 && copy != fd);
+    check("the copy shares the position", copy >= 0 && lseek(fd, 2, SEEK_SET) == 2 && lseek(copy, 0, SEEK_CUR) == 2);
+    close(fd);
+    check("and keeps the file open when the first closes", copy >= 0 && read(copy, buf, 3) == 3);
+    int third = copy >= 0 ? fcntl(copy, F_DUPFD_CLOEXEC, 40) : -1;
+    check("F_DUPFD_CLOEXEC takes a number at or above the one asked", third >= 40);
+    int other = open(FILE_B, O_RDONLY);
+    check("dup2 replaces what the target named", other >= 0 && third >= 0 && dup2(other, third) == third && lseek(third, 0, SEEK_END) == 1);
+    check("and the first file's copy still names it", copy >= 0 && lseek(copy, 0, SEEK_END) == 5000);
+    check("dup3 refuses to copy a descriptor onto itself", other >= 0 && dup3(other, other, 0) == -1 && errno == EINVAL);
+    close(copy);
+    close(third);
+    close(other);
+    check("a descriptor that was closed is gone", fcntl(copy, F_GETFD) == -1 && errno == EBADF);
+    char lock[] = TESTDIR "/lock-XXXXXX";
+    int made = mkstemp(lock);
+    int kept = made >= 0 ? fcntl(made, F_DUPFD_CLOEXEC, STDIN_FILENO) : -1;
+    if (made >= 0) {
+        close(made);
+    }
+    check("mkstemp and a close-on-exec copy, as fontconfig makes a lock",
+          kept >= 0 && write(kept, "1\n", 2) == 2 && close(kept) == 0 && unlink(lock) == 0);
+
+    check("tidy up", unlink(FILE_A) == 0 && unlink(FILE_B) == 0 && rmdir(TESTDIR) == 0);
 
     printf("filetest: %s\n", failed ? "FAILED" : "ok");
     return failed ? 1 : 0;
