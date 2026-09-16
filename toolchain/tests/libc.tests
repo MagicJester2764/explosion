@@ -4,3 +4,4 @@ tlstest
 ctortest
 mmaptest
 filetest
+dirtest
