@@ -6,6 +6,10 @@
 # Needs x86_64-quark-musl-gcc on PATH (build-musl.sh), meson and ninja, and a
 # host expat for wayland-scanner. HOSTPREFIX is where the host-side tools go.
 #
+# A distribution's `expat` package is the shared library only; the scanner needs
+# the headers and the pkg-config file, which come from `expat-devel` or from
+# building expat into a prefix of your own and pointing PKG_CONFIG_PATH at it.
+#
 # Two builds, because a cross build still needs a wayland-scanner that runs on
 # *this* machine: one native with only the scanner, installed so its pkg-config
 # file exists, and one cross with only the libraries.
