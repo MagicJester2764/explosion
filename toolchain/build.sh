@@ -44,9 +44,16 @@ cd ..
 
 echo "==> gcc"
 mkdir -p build-gcc-quark && cd build-gcc-quark
+# --enable-initfini-array is not optional. Without it gcc puts every
+# constructor in .ctors, which only crtbegin.o and crtend.o know how to run —
+# and nothing here links them, so no constructor in any C program on Quark ran.
+# musl runs .init_array, and configure only turns it on by itself for targets
+# it recognises. pixman builds its whole implementation table in a constructor,
+# which is how this was found: every composite came back "no function found".
 "$GCC_SRC/configure" --target=$TARGET --prefix="$PREFIX" \
     --with-sysroot="$SYSROOT" \
     --enable-languages=c \
+    --enable-initfini-array \
     --disable-nls --disable-shared --disable-threads \
     --disable-libssp --disable-libquadmath --disable-libatomic \
     --disable-libgomp --disable-libvtv --disable-libstdcxx
