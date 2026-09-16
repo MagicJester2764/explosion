@@ -34,6 +34,8 @@ static struct wl_shm *shm;
 static struct xdg_wm_base *wm_base;
 static struct wl_seat *seat;
 static struct wl_keyboard *keyboard;
+static struct wl_pointer *pointer;
+static int motions;
 static uint32_t formats;
 static int globals;
 
@@ -167,7 +169,7 @@ static void frame_done(void *data, struct wl_callback *c, uint32_t time) {
        console, so these lines are read in scrollback afterwards -- and there is
        no "afterwards" for a client the session takes with it when it closes. */
     if (frames % 60 == 0) {
-        printf("frames: %d releases: %d\n", frames, releases);
+        printf("frames: %d releases: %d motions: %d\n", frames, releases, motions);
     }
     draw(frames);
 }
@@ -232,6 +234,49 @@ static void kb_repeat(void *d, struct wl_keyboard *k, int32_t rate,
 
 static const struct wl_keyboard_listener kb_listener = {
     kb_keymap, kb_enter, kb_leave, kb_key, kb_modifiers, kb_repeat,
+};
+
+/* The pointer half of the seat. wl_fixed is 24.8, so the whole-pixel part is
+   the value shifted down by eight. */
+static void pt_enter(void *d, struct wl_pointer *p, uint32_t serial,
+                     struct wl_surface *s, wl_fixed_t x, wl_fixed_t y) {
+    (void)d; (void)p; (void)s;
+    printf("pointer enter: serial %u at %d %d\n", serial,
+           wl_fixed_to_int(x), wl_fixed_to_int(y));
+}
+
+static void pt_leave(void *d, struct wl_pointer *p, uint32_t serial,
+                     struct wl_surface *s) {
+    (void)d; (void)p; (void)s;
+    printf("pointer leave: serial %u\n", serial);
+}
+
+static void pt_motion(void *d, struct wl_pointer *p, uint32_t time,
+                      wl_fixed_t x, wl_fixed_t y) {
+    (void)d; (void)p; (void)time;
+    motions++;
+    /* Not every one: the compositor sends these as fast as the mouse reports,
+       and a console cannot keep up with a hundred lines a second. */
+    if (motions % 10 == 0) {
+        printf("pointer motion: %d at %d %d\n", motions,
+               wl_fixed_to_int(x), wl_fixed_to_int(y));
+    }
+}
+
+static void pt_button(void *d, struct wl_pointer *p, uint32_t serial,
+                      uint32_t time, uint32_t button, uint32_t state) {
+    (void)d; (void)p; (void)time;
+    printf("pointer button: serial %u code %u %s\n", serial, button,
+           state ? "down" : "up");
+}
+
+static void pt_axis(void *d, struct wl_pointer *p, uint32_t time,
+                    uint32_t axis, wl_fixed_t value) {
+    (void)d; (void)p; (void)time; (void)axis; (void)value;
+}
+
+static const struct wl_pointer_listener pt_listener = {
+    pt_enter, pt_leave, pt_motion, pt_button, pt_axis,
 };
 
 static void wm_base_ping(void *data, struct xdg_wm_base *b, uint32_t serial) {
@@ -302,6 +347,8 @@ int main(void) {
     if (seat) {
         keyboard = wl_seat_get_keyboard(seat);
         wl_keyboard_add_listener(keyboard, &kb_listener, NULL);
+        pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(pointer, &pt_listener, NULL);
         wl_display_roundtrip(d);
     }
 
