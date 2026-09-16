@@ -8,6 +8,9 @@ Operations, one per line:
     move <dx> <dy>       relative pointer motion, sent as a short stream
     click <button>       press and release, e.g. "left"
     shot <path>          screendump
+    hmp <command>        a monitor command, its output printed: `hmp info
+                         registers` says where a guest that stopped
+                         answering is spending its time
     quit                 stop the guest
 
 The timing lives here rather than in the shell that calls it: a foreground
@@ -117,6 +120,10 @@ for raw in open(script_path):
     elif op == "shot":
         cmd("screendump", filename=arg)
         print("shot", arg, flush=True)
+    elif op == "hmp":
+        reply = cmd("human-monitor-command", **{"command-line": arg})
+        print("hmp", arg, flush=True)
+        print((reply or {}).get("return", reply), flush=True)
     elif op == "quit":
         cmd("quit")
 print("done", flush=True)
