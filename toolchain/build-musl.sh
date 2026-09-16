@@ -45,13 +45,23 @@ cat > "$PREFIX/lib/musl-quark.specs" <<SPECS
 # left alone on purpose: the base address, the link script, static and non-PIE
 # are properties of Quark and are the same whichever libc is on top.
 
+#
+# The include order is musl's, then the compiler's own, then Quark's platform
+# headers. -nostdinc removes all three, so each has to be put back, and the
+# middle one is the easy one to forget: \`include%s\` is gcc's private directory,
+# which holds the intrinsics (xmmintrin.h, cpuid.h), stdatomic.h and the rest of
+# what the compiler supplies rather than the C library. musl-gcc on Linux lists
+# it in exactly this position. Without it every program using SSE intrinsics or
+# C11 atomics fails to compile, which pixman's test suite was the first to do.
+# musl comes first so that its stddef.h and friends win over gcc's.
+
 %rename cpp_options old_cpp_options
 
 *cpp_options:
--nostdinc -isystem $PREFIX/include -isystem $QUARK_SRC/user/libc/include %(old_cpp_options)
+-nostdinc -isystem $PREFIX/include -isystem include%s -isystem $QUARK_SRC/user/libc/include %(old_cpp_options)
 
 *cc1:
-%(cc1_cpu) -nostdinc -isystem $PREFIX/include -isystem $QUARK_SRC/user/libc/include
+%(cc1_cpu) -nostdinc -isystem $PREFIX/include -isystem include%s -isystem $QUARK_SRC/user/libc/include
 
 *startfile:
 $PREFIX/lib/crt1.o $PREFIX/lib/crti.o $QUARK_SRC/user/linux-abi/src/manifest.o
