@@ -1,0 +1,2 @@
+# expat, parsing the kind of document fontconfig reads. Expected: all passed.
+xmltest
