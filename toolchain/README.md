@@ -292,3 +292,67 @@ What the ports needed of the system, and got:
   and switching to it, and a tick there left the callee in no queue. `dtest
   calls` reproduces that in three seconds and has not seen it since the fix.
 
+
+## Tests, and the two fuzzers
+
+`runtests` reads a list from `/etc` and runs each line as a program with its
+arguments, one after another:
+
+```
+# a comment
+tlstest                 must exit 0
+? ls /no/such/place     any exit status passes; a fault or a hang does not
+@30 dchild sleep        thirty seconds, then it is killed and the line fails
+? @600 qfuzz 2000 1     both
+```
+
+A line's program is looked up in `/usr/bin`, gets the environment the shell
+gives a program and no standard input, and is watched rather than waited for,
+so a program that never exits costs its deadline and not the run. Failures are
+said as they happen and again at the end, with the arguments that caused them,
+because a list of five hundred lines scrolls the first ones off the screen.
+
+Each port's suite is a list of its own: `libc.tests` (the C library's own
+tests, one per lie a port has caught it telling), `zlib.tests`,
+`pixman.tests`, `fontconfig.tests`, `fonts.tests`, `cairo.tests`, `xml.tests`,
+`xkb.tests`. `selftest.tests` is runtests testing itself: four lines that pass
+and three that must fail.
+
+**`fuzz.tests` and `qfuzz`.** `qfuzz ROUNDS [SEED]` (in `quark/user/qfuzz`)
+sends every registered service requests built from a seed — tags from its own
+protocol, from the range the kernel's notices use, and from anywhere; words
+small, handle-sized, huge and random; with and without a buffer lent and a
+capability offered — and then checks that the service is alive, answers a
+ping, and still does its job. `fuzz.tests` runs three fixed seeds. It steers
+away from harm that would not be the service's fault: nothing lent to the VFS
+holds a slash or a dot, so every name it resolves is under `/tmp/qfuzz`;
+addresses given to the network server are on the machine's own subnet, where
+nothing answers, so nothing leaves the machine; and a driver is fuzzed only
+once it has refused a harmless request.
+
+**`wlfuzz`.** A Wayland client that writes the wire format itself, because
+libwayland would refuse to send most of what it sends: object ids that are
+gone or were never made, opcodes an interface does not have, sizes shorter
+than a header or past what was sent, strings whose length lies, descriptors
+where none are wanted and none where one is needed, pools larger than their
+memory or made from a pipe, buffers attached after they were destroyed. It
+builds a window properly first, so that the parts a bad client can hurt are
+there to hurt. Run it under the compositor, beside something that draws:
+
+    wm "wlfuzz 1 500" "wlfuzz 101 500" wlcairo
+
+It stops when the compositor closes the connection, says how far it got and
+what the compositor said about it, and exits 0 either way: the test is whether
+the compositor lives, and whether the window beside it keeps drawing.
+
+**`hostile.tests`.** Written by `tools/gen-hostile-tests.sh` at staging time
+from whatever is in the staged `/usr/bin`: every program, with each of no
+arguments, `-`, `--`, `-x`, `--help`, a 300-byte word, `/nonexistent`,
+`/etc`, `/dev/null`, `/etc/hostile-sample`, `99999999999999999999`, `-1`,
+`0`, `héllo`, a control byte, and fifteen arguments. Each line allows any exit
+status and thirty seconds: a program may complain, but it may not fault and it
+may not hang. Left out are the programs that would do something other than be
+tested — `shutdown`, `login`, `runtests`, `wm`, `qfuzz` — the programs a
+port's own suite runs, whose arguments are test numbers and iteration counts,
+and `weston-simple-shm`, which asserts that it has a compositor and is not
+ours to patch.
