@@ -43,6 +43,7 @@ static void clear_leftovers(void) {
     rmdir(TESTDIR "/sub-renamed");
     unlink(TESTDIR "/gone");
     unlink(TESTDIR "/moved");
+    unlink(TESTDIR "/hard");
     unlink(FILE_B);
     DIR *d = opendir(TESTDIR);
     struct dirent *e;
@@ -130,7 +131,21 @@ int main(void) {
     close(fd);
     check("unlinking it again says so", unlink(GONE) == -1 && errno == ENOENT);
     check("unlink refuses a directory", unlink(TESTDIR) == -1 && errno == EISDIR);
-    check("link is not offered", link(FILE_A, TESTDIR "/hard") == -1 && errno == EPERM);
+    #define HARD TESTDIR "/hard"
+    struct stat h1, h2;
+    check("link makes a second name", link(FILE_A, HARD) == 0);
+    check("for the same file", stat(FILE_A, &h1) == 0 && stat(HARD, &h2) == 0 &&
+          h1.st_ino == h2.st_ino && h1.st_nlink == 2);
+    fd = open(HARD, O_WRONLY);
+    check("a write through one name", fd >= 0 && pwrite(fd, "L", 1, 0) == 1);
+    close(fd);
+    fd = open(FILE_A, O_RDONLY);
+    check("shows through the other", fd >= 0 && read(fd, buf, 1) == 1 && buf[0] == 'L');
+    close(fd);
+    check("unlinking one name", unlink(HARD) == 0);
+    check("leaves the other", stat(FILE_A, &h1) == 0 && h1.st_nlink == 1);
+    check("link refuses a directory", link(TESTDIR, HARD) == -1 && errno == EPERM);
+    check("and a name that is taken", link(FILE_A, FILE_B) == -1 && errno == EEXIST);
 
     #define MOVED TESTDIR "/moved"
     unlink(MOVED);
