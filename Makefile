@@ -113,6 +113,8 @@ stage: FORCE
 	@./tools/stage-overlays.sh $(STAGE) $(ROOT_OVERLAYS)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
+	@# Last, since it lists every program the stage now has.
+	@./tools/gen-hostile-tests.sh $(STAGE)
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------
