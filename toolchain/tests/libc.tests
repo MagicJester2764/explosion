@@ -13,3 +13,4 @@ locktest
 lazytest
 maptest
 forktest
+exectest
