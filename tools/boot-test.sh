@@ -3,6 +3,9 @@
 #
 #     ./tools/boot-test.sh <keys-file> <screenshot.ppm>
 #
+# `IMG` is the image to boot and `RUNDIR` where the emulator's sockets and log
+# go, so that two boots — an ext2 one and an ext4 one — can run at once.
+#
 # Verification here is boot-in-QEMU: user-space `println!` goes to the
 # framebuffer and not to serial, so a screendump is the output and serial only
 # catches kernel faults.
@@ -20,6 +23,7 @@
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
 RUN=${RUNDIR:-${TMPDIR:-/tmp}/quark-boot-test}
+IMG=${IMG:-hdimage.bin}
 mkdir -p "$RUN"
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
@@ -38,7 +42,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
-  -hda hdimage.bin -display none \
+  -hda "$IMG" -display none \
   -device rtl8139,netdev=n -netdev user,id=n \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &
