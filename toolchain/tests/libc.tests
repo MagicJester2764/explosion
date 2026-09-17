@@ -15,3 +15,4 @@ maptest
 forktest
 exectest
 ptytest
+timertest
