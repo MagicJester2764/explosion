@@ -37,6 +37,7 @@ static struct wl_seat *seat;
 static struct wl_keyboard *keyboard;
 static struct wl_pointer *pointer;
 static struct zxdg_decoration_manager_v1 *decor;
+static struct wl_output *output;
 static int motions;
 static uint32_t formats;
 static int globals;
@@ -60,6 +61,8 @@ static void global(void *data, struct wl_registry *r, uint32_t name,
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     } else if (strcmp(iface, "xdg_wm_base") == 0) {
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
+    } else if (strcmp(iface, "wl_output") == 0) {
+        output = wl_registry_bind(r, name, &wl_output_interface, 2);
     } else if (strcmp(iface, "wl_seat") == 0) {
         seat = wl_registry_bind(r, name, &wl_seat_interface, 4);
     } else if (strcmp(iface, "zxdg_decoration_manager_v1") == 0) {
@@ -152,6 +155,38 @@ static void frame_done(void *data, struct wl_callback *c, uint32_t time);
 static const struct wl_callback_listener frame_listener = { frame_done };
 
 static struct wl_surface *surface;
+static int on_output;
+
+/* Which outputs this surface is being shown on. A client with one output
+   learns little from it, but a client that never hears an enter has no way to
+   know it is visible at all -- and no way to pick a scale when there is more
+   than one screen. */
+static void surface_enter(void *data, struct wl_surface *s, struct wl_output *o) {
+    (void)data; (void)s;
+    on_output++;
+    printf("surface enter: output %u\n", wl_proxy_get_id((struct wl_proxy *)o));
+}
+
+static void surface_leave(void *data, struct wl_surface *s, struct wl_output *o) {
+    (void)data; (void)s;
+    on_output--;
+    printf("surface leave: output %u\n", wl_proxy_get_id((struct wl_proxy *)o));
+}
+
+static void surface_scale(void *data, struct wl_surface *s, int32_t factor) {
+    (void)data; (void)s; (void)factor;
+}
+
+static void surface_transform(void *data, struct wl_surface *s, uint32_t t) {
+    (void)data; (void)s; (void)t;
+}
+
+static const struct wl_surface_listener surface_events = {
+    .enter = surface_enter,
+    .leave = surface_leave,
+    .preferred_buffer_scale = surface_scale,
+    .preferred_buffer_transform = surface_transform,
+};
 
 /* Fill a buffer with something that moves, so a screendump shows whether the
    compositor is showing this frame or an older one. */
@@ -369,6 +404,7 @@ int main(void) {
 
     /* A surface with a role, and nothing shown until the size is agreed. */
     surface = wl_compositor_create_surface(compositor);
+    wl_surface_add_listener(surface, &surface_events, NULL);
     struct xdg_surface *xs = xdg_wm_base_get_xdg_surface(wm_base, surface);
     xdg_surface_add_listener(xs, &surface_listener, NULL);
     struct xdg_toplevel *top = xdg_surface_get_toplevel(xs);
@@ -405,7 +441,7 @@ int main(void) {
     while (wl_display_dispatch(d) != -1) {
         ;
     }
-    printf("frames: %d releases: %d\n", frames, releases);
+    printf("frames: %d releases: %d on_output: %d\n", frames, releases, on_output);
     why(d);
     wl_display_disconnect(d);
     return 0;
