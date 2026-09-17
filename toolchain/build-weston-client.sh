@@ -48,10 +48,19 @@ stubs "$PROTO_DIR/fullscreen-shell/fullscreen-shell-unstable-v1.xml" \
       fullscreen-shell-unstable-v1
 stubs "$PROTO_DIR/xdg-decoration/xdg-decoration-unstable-v1.xml" \
       xdg-decoration-unstable-v1
+# The primary selection, whose file two distributions spell differently: Qt
+# ships it as wp-primary-selection and wayland-protocols as
+# unstable/primary-selection.
+PRIMARY_XML=$PROTO_DIR/wp-primary-selection/wp-primary-selection-unstable-v1.xml
+if [ ! -f "$PRIMARY_XML" ]; then
+    PRIMARY_XML=$PROTO_DIR/unstable/primary-selection/primary-selection-unstable-v1.xml
+fi
+stubs "$PRIMARY_XML" primary-selection-unstable-v1
 
 echo "==> wlclip"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlclip" "$HERE/wlclip.c" \
-    "$OUT/xdg-shell-protocol.c" $INC $LIB
+    "$OUT/xdg-shell-protocol.c" "$OUT/primary-selection-unstable-v1-protocol.c" \
+    $INC $LIB
 
 echo "==> wlscroll"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlscroll" "$HERE/wlscroll.c" \

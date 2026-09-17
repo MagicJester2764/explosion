@@ -1,18 +1,21 @@
 /* Two halves of a clipboard, in one program.
  *
- * Run as `wm wlclip wlclip`. The compositor passes each session program its
- * index as argv[1] — "1" for the first, "2" for the second — and that is what
- * decides which half this is. Taking the role from the tag the compositor
- * already supplies is deliberate: adding argument plumbing to the compositor so
- * that a test could pass a flag would be changing the thing under test.
+ *     wm "wlclip copy" "wlclip paste"
+ *     wm "wlclip --primary copy" "wlclip --primary paste"
  *
- * The first copies: it offers a data source and takes the selection. The second
- * pastes: it waits to be offered one, hands over a pipe, and reads.
+ * The copier offers a source and takes the selection; the paster waits to be
+ * offered one, hands over a pipe, and reads.
  *
  * Two programs rather than one, because a clipboard with a single participant
  * does not exercise the part that matters — the offer is an object the
  * compositor names in the *receiver's* id table while the source lives in the
  * sender's, and with one client those are the same table.
+ *
+ * `--primary` does the whole thing again over the primary selection, which is
+ * the same protocol with different names: a manager, a device, a source and an
+ * offer, and the middle button rather than a copy command. Both are exercised
+ * because a compositor with two selections can very easily have one of them be
+ * the other.
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -24,6 +27,7 @@
 #include <wayland-client.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
 
 #define W 160
 #define H 120
@@ -40,6 +44,10 @@ static struct wl_seat *seat;
 static struct wl_data_device_manager *ddm;
 static struct wl_data_device *device;
 static struct wl_data_offer *offer;
+static struct zwp_primary_selection_device_manager_v1 *pdm;
+static struct zwp_primary_selection_device_v1 *pdevice;
+static struct zwp_primary_selection_offer_v1 *poffer;
+static int primary; /* the other selection, set by --primary */
 static struct wl_surface *surface;
 static int configured;
 static int offered_mime;   /* the receiver was told about MIME */
@@ -58,6 +66,9 @@ static void global(void *data, struct wl_registry *r, uint32_t name,
         seat = wl_registry_bind(r, name, &wl_seat_interface, 1);
     } else if (strcmp(iface, "wl_data_device_manager") == 0) {
         ddm = wl_registry_bind(r, name, &wl_data_device_manager_interface, 1);
+    } else if (strcmp(iface, "zwp_primary_selection_device_manager_v1") == 0) {
+        pdm = wl_registry_bind(
+            r, name, &zwp_primary_selection_device_manager_v1_interface, 1);
     }
 }
 
@@ -150,9 +161,70 @@ static const struct wl_data_device_listener dev_listener = {
     dev_data_offer, dev_enter, dev_leave, dev_motion, dev_drop, dev_selection,
 };
 
+/* --- the same again, over the primary selection --- */
+
+static void psrc_send(void *d, struct zwp_primary_selection_source_v1 *s,
+                      const char *mime, int32_t fd) {
+    (void)d; (void)s;
+    printf("copy: asked for %s\n", mime);
+    ssize_t n = write(fd, PAYLOAD, sizeof PAYLOAD - 1);
+    printf("copy: wrote %d\n", (int)n);
+    close(fd);
+}
+
+static void psrc_cancelled(void *d, struct zwp_primary_selection_source_v1 *s) {
+    (void)d; (void)s;
+    printf("copy: cancelled\n");
+}
+
+static const struct zwp_primary_selection_source_v1_listener psrc_listener = {
+    psrc_send, psrc_cancelled,
+};
+
+static void poffer_mime(void *d, struct zwp_primary_selection_offer_v1 *o,
+                        const char *mime) {
+    (void)d; (void)o;
+    printf("paste: offered %s\n", mime);
+    if (strcmp(mime, MIME) == 0) {
+        offered_mime = 1;
+    }
+}
+
+static const struct zwp_primary_selection_offer_v1_listener poffer_listener = {
+    poffer_mime,
+};
+
+static void pdev_data_offer(void *d, struct zwp_primary_selection_device_v1 *dev,
+                            struct zwp_primary_selection_offer_v1 *o) {
+    (void)d; (void)dev;
+    poffer = o;
+    zwp_primary_selection_offer_v1_add_listener(o, &poffer_listener, NULL);
+}
+
+static void pdev_selection(void *d, struct zwp_primary_selection_device_v1 *dev,
+                           struct zwp_primary_selection_offer_v1 *o) {
+    (void)d; (void)dev;
+    if (o == NULL) {
+        printf("paste: selection cleared\n");
+        return;
+    }
+    have_selection = 1;
+}
+
+static const struct zwp_primary_selection_device_v1_listener pdev_listener = {
+    pdev_data_offer, pdev_selection,
+};
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
-    int paster = argc > 1 && argv[1][0] == '2';
+    int paster = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--primary") == 0) {
+            primary = 1;
+        } else if (strcmp(argv[i], "paste") == 0 || argv[i][0] == '2') {
+            paster = 1;
+        }
+    }
     const char *who = paster ? "paste" : "copy";
 
     struct wl_display *d = wl_display_connect(NULL);
@@ -165,6 +237,10 @@ int main(int argc, char **argv) {
     wl_display_roundtrip(d);
     if (!compositor || !shm || !wm_base || !seat || !ddm) {
         printf("%s: missing a global (ddm %s)\n", who, ddm ? "OK" : "NULL");
+        return 1;
+    }
+    if (primary && !pdm) {
+        printf("%s: no zwp_primary_selection_device_manager_v1\n", who);
         return 1;
     }
 
@@ -201,16 +277,29 @@ int main(int argc, char **argv) {
     wl_surface_commit(surface);
     wl_display_roundtrip(d);
 
-    device = wl_data_device_manager_get_data_device(ddm, seat);
-    wl_data_device_add_listener(device, &dev_listener, NULL);
+    if (primary) {
+        pdevice = zwp_primary_selection_device_manager_v1_get_device(pdm, seat);
+        zwp_primary_selection_device_v1_add_listener(pdevice, &pdev_listener, NULL);
+    } else {
+        device = wl_data_device_manager_get_data_device(ddm, seat);
+        wl_data_device_add_listener(device, &dev_listener, NULL);
+    }
     wl_display_roundtrip(d);
 
     if (!paster) {
-        struct wl_data_source *src = wl_data_device_manager_create_data_source(ddm);
-        wl_data_source_add_listener(src, &src_listener, NULL);
-        wl_data_source_offer(src, MIME);
-        wl_data_device_set_selection(device, src, 0);
-        printf("copy: selection set\n");
+        if (primary) {
+            struct zwp_primary_selection_source_v1 *src =
+                zwp_primary_selection_device_manager_v1_create_source(pdm);
+            zwp_primary_selection_source_v1_add_listener(src, &psrc_listener, NULL);
+            zwp_primary_selection_source_v1_offer(src, MIME);
+            zwp_primary_selection_device_v1_set_selection(pdevice, src, 0);
+        } else {
+            struct wl_data_source *src = wl_data_device_manager_create_data_source(ddm);
+            wl_data_source_add_listener(src, &src_listener, NULL);
+            wl_data_source_offer(src, MIME);
+            wl_data_device_set_selection(device, src, 0);
+        }
+        printf("copy: %s selection set\n", primary ? "primary" : "clipboard");
         /* Stay alive to answer: a source whose client has gone is a clipboard
            with nothing behind it. */
         while (wl_display_dispatch(d) != -1) {
@@ -237,7 +326,11 @@ int main(int argc, char **argv) {
         printf("paste: no pipe (errno %d)\n", errno);
         return 1;
     }
-    wl_data_offer_receive(offer, MIME, fds[1]);
+    if (primary) {
+        zwp_primary_selection_offer_v1_receive(poffer, MIME, fds[1]);
+    } else {
+        wl_data_offer_receive(offer, MIME, fds[1]);
+    }
     wl_display_flush(d);
     /* Our own copy of the write end goes now: the pipe ends when the *last*
        writer closes, and holding one here would mean never reaching it. */
@@ -257,7 +350,8 @@ int main(int argc, char **argv) {
     }
     in[got] = 0;
     close(fds[0]);
-    printf("paste: got %d bytes: %s\n", got, in);
+    printf("paste: got %d bytes from the %s: %s\n", got,
+           primary ? "primary selection" : "clipboard", in);
     wl_display_disconnect(d);
     return 0;
 }
