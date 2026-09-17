@@ -1,8 +1,10 @@
 // LINK: -lfontconfig -lfreetype -lexpat -lz -lm
 /* fontconfig finds the fonts on disk, answers the generic families with
-   them, and uses the cache fc-cache wrote. */
+   them, and uses the cache the image came with. */
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <fontconfig/fontconfig.h>
 
 static int failed;
@@ -59,6 +61,16 @@ int main(void) {
     check("the directory's cache loads", cache != NULL);
     check("from /var/cache/fontconfig",
           cache_file && !strncmp((const char *)cache_file, "/var/cache/fontconfig/", 22));
+#ifdef __quark__
+    /* The cache came with the image: it is older than this boot. */
+    struct timespec now, up;
+    clock_gettime(CLOCK_REALTIME, &now);
+    clock_gettime(CLOCK_MONOTONIC, &up);
+    time_t booted = now.tv_sec - up.tv_sec;
+    struct stat cst;
+    check("the cache was built with the image",
+          cache_file && stat((const char *)cache_file, &cst) == 0 && cst.st_mtime < booted);
+#endif
     if (cache) {
         FcDirCacheUnload(cache);
     }

@@ -111,6 +111,8 @@ stage: FORCE
 	done
 	@# Runs either way, like stage-coreutils.sh, so unsetting it un-stages.
 	@./tools/stage-overlays.sh $(STAGE) $(ROOT_OVERLAYS)
+	@# After the overlays, whose fonts and configuration it needs.
+	@./tools/stage-font-caches.sh $(STAGE)
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------

@@ -15,10 +15,15 @@
 # conf.d entries are links into a conf.avail the image does not carry, so they
 # are copied as the files they name.
 #
-# The cache is not built here (-Dcache-build=disabled): fc-cache is a Quark
-# program, and fontconfig.tests runs it on Quark, into /var/cache/fontconfig.
-# -Dadditional-fonts-dirs=no because its default looks for X11 font
-# directories on the machine doing the build.
+# The cache is not built here (-Dcache-build=disabled). The image comes with
+# one instead: the same fontconfig is built for this machine too, with the
+# same configuration, and its fc-cache is installed as quark-fc-cache in
+# $QUARK_HOSTDEPS/bin for tools/stage-font-caches.sh to run over the stage.
+# Its caches are the ones fc-cache writes on Quark, byte for byte, but for the
+# directory times they record. It uses the host FreeType build-freetype.sh left
+# in $FREETYPE_SRC (default beside this source) and the host expat in
+# $QUARK_HOSTDEPS. -Dadditional-fonts-dirs=no because its default looks for X11
+# font directories on the machine doing the build.
 #
 # gperf is needed while it builds; bootstrap-fonts.sh makes one in
 # $QUARK_HOSTDEPS. The one patch teaches src/fcstat.c that Quark's struct
@@ -87,3 +92,22 @@ done
 echo
 echo "fontconfig installed into $PREFIX"
 echo "$n tools in $SUITE, and its configuration in $OVERLAY"
+
+# The same fontconfig for this machine, for its fc-cache.
+FREETYPE=${FREETYPE_SRC:-$(dirname "$SRC")/freetype-2.14.3}
+HOST_PC="$FREETYPE/build-host/root/lib/pkgconfig:$HOSTDEPS/lib/pkgconfig"
+if [ ! -f "$FREETYPE/build-host/root/lib/pkgconfig/freetype2.pc" ]; then
+    echo "build-fontconfig.sh: no host FreeType in $FREETYPE/build-host; run build-freetype.sh" >&2
+    exit 1
+fi
+rm -rf build-host
+PKG_CONFIG_PATH="$HOST_PC" meson setup build-host --prefix="$PWD/build-host/root" \
+    --sysconfdir=/etc --localstatedir=/var \
+    --buildtype=debugoptimized -Ddefault_library=static --prefer-static \
+    --wrap-mode=nofallback -Dxml-backend=expat -Ddoc=disabled -Dnls=disabled \
+    -Dtests=disabled -Dcache-build=disabled -Dtools=enabled \
+    -Diconv=disabled -Dfontations=disabled -Dadditional-fonts-dirs=no >/dev/null
+ninja -C build-host fc-cache/fc-cache >/dev/null
+mkdir -p "$HOSTDEPS/bin"
+cp build-host/fc-cache/fc-cache "$HOSTDEPS/bin/quark-fc-cache"
+echo "and quark-fc-cache, for this machine, in $HOSTDEPS/bin"

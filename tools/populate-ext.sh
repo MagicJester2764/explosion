@@ -11,6 +11,10 @@
 # lowercase letter in it, the staged name was chosen on purpose and is kept:
 # DejaVuSans.ttf, and the LICENSE beside it. Links keep their staged names.
 #
+# Everything staged keeps its modification time, in whole seconds, which is
+# what lets the font caches built into the stage stay valid: fontconfig checks
+# the time of each font directory against the one its cache recorded.
+#
 # debugfs exits 0 whatever happened, so its complaints are read instead, and
 # every file is looked for afterwards. Neither is enough alone: a write that
 # runs out of room leaves the file's name and size behind with no blocks, so
@@ -68,5 +72,25 @@ debugfs -f "$CMDS" "$IMG" > "$OUT" 2>&1 || true
 if grep -q 'File not found' "$OUT"; then
     grep 'File not found' "$OUT" | sed 's/: File not found.*//; s/^/  MISSING from the image: /' >&2
     echo "$IMG is incomplete" >&2
+    exit 1
+fi
+
+# Times last, when nothing else will write into a directory and move its own.
+{
+    for kind in f l d; do
+        find usr etc var -type "$kind" 2>/dev/null | sort | while read -r p; do
+            name=$p
+            [ "$kind" = f ] && name=$(target "$p")
+            t=$(stat -c %Y "$p")
+            # @ says seconds: a bare number is read as YYYYMMDDHHMMSS first.
+            printf 'set_inode_field %s mtime @%s\n' "$name" "$t"
+            printf 'set_inode_field %s ctime @%s\n' "$name" "$t"
+            printf 'set_inode_field %s atime @%s\n' "$name" "$t"
+        done
+    done
+} > "$CMDS"
+debugfs -w -f "$CMDS" "$IMG" >/dev/null 2>"$ERR"
+if grep -v '^debugfs [0-9]' "$ERR" >&2; then
+    echo "$IMG: debugfs could not set every time" >&2
     exit 1
 fi

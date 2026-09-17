@@ -1,5 +1,6 @@
-# fontconfig: the cache is written, then used. Expected: all passed.
-fc-cache -v
+# fontconfig: the cache the image came with is used, and fc-cache finds it
+# current. Expected: all passed.
 fctest
+fc-cache -v
 fc-list
 fc-match monospace

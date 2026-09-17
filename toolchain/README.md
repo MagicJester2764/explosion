@@ -217,8 +217,17 @@ disk.
 `bootstrap-fonts.sh` fetches every source, checks each tarball against the
 SHA-256 it was tested with, and builds gperf, which fontconfig runs while it
 builds. The order above is the order they need each other in; libxkbcommon
-needs none of them. On the image, `runtests /etc/fontconfig.tests` writes the
-font caches — fontconfig on Quark is the only thing that can.
+needs none of them.
+
+The image comes with its font caches. `build-fontconfig.sh` also builds the
+same fontconfig for this machine and installs its `fc-cache` as
+`quark-fc-cache` in `$QUARK_HOSTDEPS/bin`; `make stage` runs
+`tools/stage-font-caches.sh`, which sets the staged font directories to a
+whole second and runs it over the stage as a sysroot. The caches are the ones
+fontconfig on Quark writes, byte for byte, except for the directory times
+they record — which is why `tools/populate-ext.sh` carries every staged time
+into the image, in whole seconds, and why `fctest` checks that the cache it
+loads is older than the boot.
 
 What each needed:
 
