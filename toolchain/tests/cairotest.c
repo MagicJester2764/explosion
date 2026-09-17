@@ -1,4 +1,4 @@
-// LINK: -lcairo -lpixman-1 -lm
+// LINK: -lcairo -lpixman-1 -lfontconfig -lfreetype -lexpat -lz -lm
 /* cairo's image backend draws what it draws on Linux.
  *
  * A fixed scene — a gradient, an antialiased circle, a rotated square and a

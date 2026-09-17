@@ -3,7 +3,9 @@
  * The scene cairotest checksums — a gradient, a ring, a square and a curve —
  * drawn by cairo straight into the client's wl_shm buffers, with the square
  * turning so that a screendump shows the compositor is being handed new
- * frames. Nothing here writes a pixel itself.
+ * frames, and two lines of text under it in the faces fontconfig picks for
+ * sans-serif and monospace, rasterised by FreeType from fonts on the disk.
+ * Nothing here writes a pixel itself.
  *
  * wlprobe's shape without the parts wlprobe exists to test: no seat, no
  * decoration, and nothing printed unless something failed.
@@ -19,8 +21,12 @@
 
 #include "xdg-shell-client-protocol.h"
 
-#define W 320
-#define H 240
+/* The scene's square, and the band of text under it. The first line is 485
+   pixels wide. */
+#define SCENE 240
+#define TEXT_H 64
+#define W 512
+#define H (SCENE + TEXT_H)
 #define STRIDE (W * 4)
 #define POOL_SIZE (STRIDE * H)
 /* Two buffers, so that one can be drawn into while the compositor reads the
@@ -105,10 +111,11 @@ static void wm_base_ping(void *data, struct xdg_wm_base *b, uint32_t serial) {
 
 static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
 
-/* cairotest's scene, at cairotest's size and centred, over a gradient that
-   fills the window, with the square turning two degrees a frame. XRGB8888 is
-   what the pool's buffers are, and cairo's ARGB32 has the same layout, so
-   cairo draws into the buffer in place and nothing is copied. */
+/* cairotest's scene, at cairotest's size and centred over the text, on a
+   gradient that fills the window, with the square turning two degrees a
+   frame. XRGB8888 is what the pool's buffers are, and cairo's ARGB32 has the
+   same layout, so cairo draws into the buffer in place and nothing is
+   copied. */
 static void paint(int n, int tick) {
     cairo_surface_t *s = cairo_image_surface_create_for_data(
         pixels[n], CAIRO_FORMAT_ARGB32, W, H, STRIDE);
@@ -121,8 +128,9 @@ static void paint(int n, int tick) {
     cairo_paint(cr);
     cairo_pattern_destroy(g);
 
-    cairo_translate(cr, W / 2.0, H / 2.0);
-    cairo_scale(cr, H / 200.0, H / 200.0);
+    cairo_save(cr);
+    cairo_translate(cr, W / 2.0, SCENE / 2.0);
+    cairo_scale(cr, SCENE / 200.0, SCENE / 200.0);
     cairo_translate(cr, -100, -100);
 
     cairo_set_source_rgba(cr, 1, 1, 1, 0.7);
@@ -143,6 +151,27 @@ static void paint(int n, int tick) {
     cairo_set_source_rgb(cr, 0.9, 0.1, 0.5);
     cairo_set_line_width(cr, 3);
     cairo_stroke(cr);
+    cairo_restore(cr);
+
+    /* The text, on a band dark enough to read it against either end of the
+       gradient. The first frame is where fontconfig reads its cache, or
+       scans the fonts if nothing has written one yet. */
+    cairo_rectangle(cr, 0, SCENE, W, TEXT_H);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+    cairo_fill(cr);
+    cairo_font_options_t *o = cairo_font_options_create();
+    cairo_font_options_set_antialias(o, CAIRO_ANTIALIAS_GRAY);
+    cairo_set_font_options(cr, o);
+    cairo_font_options_destroy(o);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 18);
+    cairo_move_to(cr, 12, SCENE + 26);
+    cairo_show_text(cr, "Quark renders this with cairo, FreeType and fontconfig");
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 14);
+    cairo_move_to(cr, 12, SCENE + 50);
+    cairo_show_text(cr, "DejaVu Sans Mono, from /usr/share/fonts");
 
     cairo_destroy(cr);
     cairo_surface_flush(s);

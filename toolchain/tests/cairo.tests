@@ -1,2 +1,4 @@
-# cairo's image backend. Expected: all passed.
+# cairo's image backend, and text through FreeType and fontconfig.
+# Expected: all passed.
 cairotest
+cairotext
