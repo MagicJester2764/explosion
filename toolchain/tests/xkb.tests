@@ -1,0 +1,2 @@
+# libxkbcommon, compiling the keymap the compositor sends. Expected: all passed.
+xkbtest /usr/share/xkb/us.xkb
