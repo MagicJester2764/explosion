@@ -5,8 +5,11 @@ Operations, one per line:
     sleep <seconds>      wait
     type <text>          type it, \n understood as return
     key <qcode[+qcode]>  press a named key, or a chord
-    move <dx> <dy>       relative pointer motion, sent as a short stream
+    move <dx> <dy> [n]   relative pointer motion, n steps of it (8 by default)
     click <button>       press and release, e.g. "left"
+    press <button>       hold it down; `release` lets go, and between the two
+                         a `move` is a drag
+    release <button>     let go
     wheel <up|down> <n>  n detents of the scroll wheel
     shot <path>          screendump
     hmp <command>        a monitor command, its output printed: `hmp info
@@ -105,8 +108,12 @@ for raw in open(script_path):
     elif op == "move":
         # Relative motion, which is what a PS/2 mouse reports. Sent in a few
         # steps so the guest sees a stream of packets rather than one jump.
-        dx, dy = (int(v) for v in arg.split())
-        for _ in range(8):
+        # The step count is there for aiming: a target a few pixels wide is
+        # not reachable in whole multiples of eight.
+        parts = arg.split()
+        dx, dy = int(parts[0]), int(parts[1])
+        steps = int(parts[2]) if len(parts) > 2 else 8
+        for _ in range(steps):
             cmd("input-send-event", events=[
                 {"type": "rel", "data": {"axis": "x", "value": dx}},
                 {"type": "rel", "data": {"axis": "y", "value": dy}}])
@@ -117,6 +124,13 @@ for raw in open(script_path):
         time.sleep(0.08)
         cmd("input-send-event", events=[
             {"type": "btn", "data": {"down": False, "button": arg}}])
+        time.sleep(0.08)
+    elif op == "press" or op == "release":
+        # Held down across other operations, which is what a drag is: a press,
+        # a stream of motion, and a release somewhere else. `click` cannot
+        # express that because it does both ends at once.
+        cmd("input-send-event", events=[
+            {"type": "btn", "data": {"down": op == "press", "button": arg}}])
         time.sleep(0.08)
     elif op == "wheel":
         # A wheel is a button in QEMU's input model, not an axis: one detent is

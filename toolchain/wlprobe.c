@@ -104,10 +104,32 @@ static void surface_configure(void *data, struct xdg_surface *s, uint32_t serial
 
 static const struct xdg_surface_listener surface_listener = { surface_configure };
 
+/* The states a configure carries, by name. A compositor says "resizing" while
+   a drag is going on and "activated" while the window has focus, and a client
+   that draws its own decorations draws them differently for each -- so a probe
+   that printed only the size would be missing half of what it was told. */
+static const char *state_name(uint32_t s) {
+    switch (s) {
+    case 1: return "maximized";
+    case 2: return "fullscreen";
+    case 3: return "resizing";
+    case 4: return "activated";
+    default: return "?";
+    }
+}
+
 static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w,
                                int32_t h, struct wl_array *states) {
-    (void)data; (void)t; (void)states;
-    printf("toplevel configure: %dx%d\n", w, h);
+    (void)data; (void)t;
+    printf("toplevel configure: %dx%d states:", w, h);
+    uint32_t *p;
+    wl_array_for_each(p, states) {
+        printf(" %s", state_name(*p));
+    }
+    if (states->size == 0) {
+        printf(" none");
+    }
+    printf("\n");
 }
 
 static void toplevel_close(void *data, struct xdg_toplevel *t) {

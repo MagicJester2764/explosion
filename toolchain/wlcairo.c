@@ -44,6 +44,28 @@ static int busy[BUFFERS];
 static int configured;
 static int frames;
 
+/* The size being drawn, and the size the compositor last asked for. A window
+   here is whatever size it is told to be: the scene scales to fit it and the
+   text band stays at the bottom. */
+static int cw = W, ch = H;
+static int want_w = W, want_h = H;
+static int pending_resize;
+
+/* The pool the buffers live in, kept so that a resize can build another one.
+   A wl_shm pool cannot grow -- this compositor refuses `wl_shm_pool.resize`
+   and says so -- so a new size means a new pool, and the old one goes when the
+   compositor has the new buffer. */
+static struct wl_shm_pool *pool;
+static void *pool_base;
+static size_t pool_bytes;
+static int pool_fd = -1;
+/* The previous set, waiting for the commit that replaces it. */
+static struct wl_shm_pool *old_pool;
+static struct wl_buffer *old_buffers[BUFFERS];
+static void *old_base;
+static size_t old_bytes;
+static int old_fd = -1;
+
 static void global(void *data, struct wl_registry *r, uint32_t name,
                    const char *iface, uint32_t version) {
     (void)data; (void)version;
@@ -86,7 +108,19 @@ static const struct xdg_surface_listener surface_listener = { surface_configure 
 
 static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w,
                                int32_t h, struct wl_array *states) {
-    (void)data; (void)t; (void)w; (void)h; (void)states;
+    (void)data; (void)t; (void)states;
+    /* Zero means "you choose", and what this chooses is what it already has. */
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    if (w == want_w && h == want_h) {
+        return;
+    }
+    want_w = w;
+    want_h = h;
+    /* Not here: the size changes on the next draw, so that the buffer being
+       rebuilt is never the one the compositor is reading right now. */
+    pending_resize = 1;
 }
 
 static void toplevel_close(void *data, struct xdg_toplevel *t) {
@@ -117,11 +151,18 @@ static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
    same layout, so cairo draws into the buffer in place and nothing is
    copied. */
 static void paint(int n, int tick) {
+    /* The band of text at the bottom, and what is left above it for the scene.
+       A window can be dragged down to almost nothing, so the band gives way
+       rather than eating the whole window. */
+    int band = ch > TEXT_H * 2 ? TEXT_H : ch / 2;
+    int scene_h = ch - band;
+    double scale = (cw < scene_h ? cw : scene_h) / 200.0;
+
     cairo_surface_t *s = cairo_image_surface_create_for_data(
-        pixels[n], CAIRO_FORMAT_ARGB32, W, H, STRIDE);
+        pixels[n], CAIRO_FORMAT_ARGB32, cw, ch, cw * 4);
     cairo_t *cr = cairo_create(s);
 
-    cairo_pattern_t *g = cairo_pattern_create_linear(0, 0, W, H);
+    cairo_pattern_t *g = cairo_pattern_create_linear(0, 0, cw, ch);
     cairo_pattern_add_color_stop_rgb(g, 0, 0.1, 0.2, 0.5);
     cairo_pattern_add_color_stop_rgb(g, 1, 0.9, 0.4, 0.1);
     cairo_set_source(cr, g);
@@ -129,8 +170,8 @@ static void paint(int n, int tick) {
     cairo_pattern_destroy(g);
 
     cairo_save(cr);
-    cairo_translate(cr, W / 2.0, SCENE / 2.0);
-    cairo_scale(cr, SCENE / 200.0, SCENE / 200.0);
+    cairo_translate(cr, cw / 2.0, scene_h / 2.0);
+    cairo_scale(cr, scale, scale);
     cairo_translate(cr, -100, -100);
 
     cairo_set_source_rgba(cr, 1, 1, 1, 0.7);
@@ -156,7 +197,7 @@ static void paint(int n, int tick) {
     /* The text, on a band dark enough to read it against either end of the
        gradient. The first frame is where fontconfig reads its cache, or
        scans the fonts if nothing has written one yet. */
-    cairo_rectangle(cr, 0, SCENE, W, TEXT_H);
+    cairo_rectangle(cr, 0, scene_h, cw, band);
     cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
     cairo_fill(cr);
     cairo_font_options_t *o = cairo_font_options_create();
@@ -166,11 +207,11 @@ static void paint(int n, int tick) {
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 18);
-    cairo_move_to(cr, 12, SCENE + 26);
+    cairo_move_to(cr, 12, scene_h + 26);
     cairo_show_text(cr, "Quark renders this with cairo, FreeType and fontconfig");
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, 12, SCENE + 50);
+    cairo_move_to(cr, 12, scene_h + 50);
     cairo_show_text(cr, "DejaVu Sans Mono, from /usr/share/fonts");
 
     cairo_destroy(cr);
@@ -181,7 +222,83 @@ static void paint(int n, int tick) {
 static void frame_done(void *data, struct wl_callback *c, uint32_t time);
 static const struct wl_callback_listener frame_listener = { frame_done };
 
+/* Build a pool and its buffers at a size. The previous set is put aside rather
+   than destroyed: the compositor is still reading one of them, and it may go
+   only after the commit that hands it the new one. */
+static int build_pool(int w, int h) {
+    size_t stride = (size_t)w * 4;
+    size_t bytes = stride * (size_t)h * BUFFERS;
+    int fd = memfd_create("wlcairo", 0);
+    if (fd < 0 || ftruncate(fd, (off_t)bytes) < 0) {
+        if (fd >= 0) {
+            close(fd);
+        }
+        return 0;
+    }
+    void *base = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) {
+        close(fd);
+        return 0;
+    }
+    struct wl_shm_pool *p = wl_shm_create_pool(shm, fd, (int32_t)bytes);
+    old_pool = pool;
+    old_base = pool_base;
+    old_bytes = pool_bytes;
+    old_fd = pool_fd;
+    for (int i = 0; i < BUFFERS; i++) {
+        old_buffers[i] = buffers[i];
+    }
+    pool = p;
+    pool_base = base;
+    pool_bytes = bytes;
+    pool_fd = fd;
+    for (int i = 0; i < BUFFERS; i++) {
+        pixels[i] = (char *)base + (size_t)i * stride * (size_t)h;
+        buffers[i] = wl_shm_pool_create_buffer(pool, (int32_t)((size_t)i * stride * (size_t)h),
+                                               w, h, (int32_t)stride,
+                                               WL_SHM_FORMAT_XRGB8888);
+        wl_buffer_add_listener(buffers[i], &buffer_listener, (void *)(long)i);
+        busy[i] = 0;
+    }
+    cw = w;
+    ch = h;
+    return 1;
+}
+
+/* Let the previous set go, after the commit that replaced it. Destroying a
+   buffer the compositor is showing is allowed -- it keeps the pixels until it
+   stops showing them -- and the order is what makes it safe: the attach and
+   the commit are already on the wire ahead of these. */
+static void drop_old_pool(void) {
+    if (!old_pool) {
+        return;
+    }
+    for (int i = 0; i < BUFFERS; i++) {
+        if (old_buffers[i]) {
+            wl_buffer_destroy(old_buffers[i]);
+            old_buffers[i] = NULL;
+        }
+    }
+    wl_shm_pool_destroy(old_pool);
+    munmap(old_base, old_bytes);
+    close(old_fd);
+    old_pool = NULL;
+    old_base = NULL;
+    old_fd = -1;
+}
+
 static void draw(int tick) {
+    if (pending_resize) {
+        /* A failure here leaves the old size in place, which is a client that
+           carries on rather than one that dies for want of memory. */
+        if (build_pool(want_w, want_h)) {
+            pending_resize = 0;
+        } else {
+            want_w = cw;
+            want_h = ch;
+            pending_resize = 0;
+        }
+    }
     int n = 0;
     while (n < BUFFERS && busy[n]) {
         n++;
@@ -192,10 +309,11 @@ static void draw(int tick) {
     paint(n, tick);
     busy[n] = 1;
     wl_surface_attach(surface, buffers[n], 0, 0);
-    wl_surface_damage(surface, 0, 0, W, H);
+    wl_surface_damage(surface, 0, 0, cw, ch);
     struct wl_callback *cb = wl_surface_frame(surface);
     wl_callback_add_listener(cb, &frame_listener, NULL);
     wl_surface_commit(surface);
+    drop_old_pool();
 }
 
 static void frame_done(void *data, struct wl_callback *c, uint32_t time) {
@@ -221,22 +339,9 @@ int main(void) {
     }
     xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
 
-    int fd = memfd_create("wlcairo", 0);
-    if (fd < 0 || ftruncate(fd, POOL_SIZE * BUFFERS) < 0) {
+    if (!build_pool(W, H)) {
         printf("wlcairo: no memory for a pool\n");
         return 1;
-    }
-    void *base = mmap(NULL, POOL_SIZE * BUFFERS, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (base == MAP_FAILED) {
-        printf("wlcairo: cannot map the pool\n");
-        return 1;
-    }
-    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, POOL_SIZE * BUFFERS);
-    for (int i = 0; i < BUFFERS; i++) {
-        pixels[i] = (char *)base + i * POOL_SIZE;
-        buffers[i] = wl_shm_pool_create_buffer(pool, i * POOL_SIZE, W, H, STRIDE,
-                                               WL_SHM_FORMAT_XRGB8888);
-        wl_buffer_add_listener(buffers[i], &buffer_listener, (void *)(long)i);
     }
 
     surface = wl_compositor_create_surface(compositor);
