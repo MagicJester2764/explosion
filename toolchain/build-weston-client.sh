@@ -53,6 +53,10 @@ echo "==> wlclip"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlclip" "$HERE/wlclip.c" \
     "$OUT/xdg-shell-protocol.c" $INC $LIB
 
+echo "==> wlscroll"
+x86_64-quark-musl-gcc -O2 -o "$OUT/wlscroll" "$HERE/wlscroll.c" \
+    "$OUT/xdg-shell-protocol.c" $INC $LIB
+
 echo "==> wlprobe"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" \
     "$OUT/xdg-shell-protocol.c" "$OUT/xdg-decoration-unstable-v1-protocol.c" \
