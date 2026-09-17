@@ -130,6 +130,7 @@ $(BOOT_IMG): stage
 $(ROOTFS_IMG): stage
 	dd if=/dev/zero of=$(ROOTFS_IMG) bs=1k count=$(ROOTFS_SIZE_KB) status=none
 	mformat -i $(ROOTFS_IMG) -F ::
+	mmd -i $(ROOTFS_IMG) ::/dev
 	@cd $(STAGE) && \
 	find usr etc home -mindepth 0 -type d | sort | while read d; do \
 		mmd -i $(CURDIR)/$(ROOTFS_IMG) "::$$d" 2>/dev/null || true; \

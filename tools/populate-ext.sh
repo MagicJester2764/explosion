@@ -38,7 +38,8 @@ OUT=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
 {
-    printf 'mkdir home\nmkdir home/root\nmkdir tmp\n'
+    # /dev is the VFS's, but listing / should show it.
+    printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\n'
     find usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
     find usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'write %s %s\n' "$f" "$(target "$f")"

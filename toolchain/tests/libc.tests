@@ -6,3 +6,4 @@ mmaptest
 filetest
 dirtest
 threadfile
+randtest
