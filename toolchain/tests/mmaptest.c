@@ -1,14 +1,15 @@
-/* A mapping the machine cannot back is refused, and the refusal leaves
+/* A mapping bigger than the machine is refused, and the refusal leaves
  * nothing behind.
  *
- * Quark backs anonymous memory when it is mapped rather than when it is first
- * touched, so a program asking for far more than it will use is told no where
- * Linux says yes. pixman does that — a trapezoid mask the size of its whole
- * destination, drawn into one corner — and copes, because it checks. What it
- * could not cope with was the C library mapping as much as it could before
- * giving up, and keeping it: the memory was gone for good, and so was the
- * address the next mapping was going to use, so every mapping after it failed
- * as well. pixman's stress test died on the NULL from a 300 KB allocation.
+ * Anonymous memory is given its frames when it is touched, but a single
+ * mapping bigger than all of memory is refused when it is made, as Linux's
+ * overcommit heuristic refuses it without MAP_NORESERVE. pixman asks for such
+ * things — a trapezoid mask the size of its whole destination, drawn into one
+ * corner — and copes, because it checks; and a calloc of one has to come back
+ * NULL, or the C library reads all of it looking for zeroes. What pixman could
+ * not cope with, once, was a refusal that kept what it had taken on the way:
+ * the address the next mapping was going to use was gone, so every mapping
+ * after it failed as well.
  *
  * Exits 0 only if every check holds.
  */
@@ -58,8 +59,8 @@ static int malloc_works(size_t len)
 int main(void)
 {
     /* More than any machine this runs on, but inside the range the C library
-       hands out addresses from — so it is the kernel that says no, part way
-       through, and not a bounds check before anything is mapped. */
+       hands out addresses from — so it is the kernel that says no, and not a
+       bounds check in the library. */
     check("64 GiB is refused", map(64 * GiB) == MAP_FAILED);
     check("a megabyte can still be mapped and used", use(MiB));
     check("64 GiB is refused again", map(64 * GiB) == MAP_FAILED);
