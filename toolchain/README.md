@@ -94,11 +94,13 @@ than a workaround:
   quarter of a megabyte on its stack in one frame and faulted on the first
   write to it. It is a megabyte now, mapped eagerly because there is no demand
   paging — which is also why it is not Linux's eight.
-- **A manifest per image, not per program.** File data moves through a page the
-  program owns, so a program that opens a file needs a capability to allocate
-  one. coreutils does not know that; it called `fopen`. The C library declares
-  it, in an object linked beside the entry point, and a spawner now grants
-  every manifest block in an image rather than the first one it finds.
+- **A manifest per image, not per program.** File data moved through a page the
+  program owned then, so a program that opened a file needed a capability to
+  allocate one. coreutils does not know that; it called `fopen`. The C library
+  declared it, in an object linked beside the entry point, and a spawner grants
+  every manifest block in an image rather than the first one it finds. File
+  data is lent to the VFS with each call now, and the C library's manifest asks
+  for nothing; the object stays because the specs name it on every link.
 - **Closing a standard descriptor is not an error.** Every tool that tidies up
   after itself calls `close(0)`, and answering EBADF made all of them print a
   complaint they could do nothing about.
@@ -129,10 +131,11 @@ install rather than a checkout — so it takes a directory somebody else built:
     make -C ../explosion hd COREUTILS=/path/to/build-coreutils-quark/src
 
 The programs are stripped on the way in, because the debug info is three
-quarters of 54 MB and the root filesystem is 33. Quark's own userland keeps its
-names: `ls` here would be coreutils' `ls`, which wants `getdents64`, while the
-in-tree one lists a directory over the VFS protocol and works. With `COREUTILS`
-unset the staging step takes back anything a previous one put there.
+quarters of 54 MB and the root filesystem was 33 (it is 64 now). Quark's own
+userland keeps its names: `ls` here is the in-tree one. coreutils' would list a
+directory too, since the layer answers `getdents64`, but it is not what the
+rest of the system expects to find. With `COREUTILS` unset the staging step
+takes back anything a previous one put there.
 
 ## libffi and libwayland
 
@@ -191,4 +194,92 @@ disconnected
 
 Twelve bytes of real Wayland protocol, marshalled by upstream libwayland and
 written down a Quark socketpair. What is missing is the thing on the other end.
+
+## The font stack
+
+zlib, FreeType, expat, fontconfig and libxkbcommon build for Quark, and cairo
+draws text with them: `wlcairo` writes two lines in DejaVu Sans and DejaVu Sans
+Mono, found by fontconfig in a cache it wrote on Quark, from fonts read off the
+disk.
+
+    ./toolchain/bootstrap-fonts.sh
+    ./toolchain/build-zlib.sh ~/opt/src/zlib-1.3.2 /tmp/suite-zlib
+    ./toolchain/build-freetype.sh ~/opt/src/freetype-2.14.3
+    ./toolchain/build-expat.sh ~/opt/src/expat-2.6.4.tar.xz
+    ./toolchain/build-fontconfig.sh ~/opt/src/fontconfig-2.18.3 /tmp/suite-fc /tmp/overlay
+    ./toolchain/build-cairo.sh ~/opt/src/cairo-1.18.4 ~/opt/src/pixman-0.44.2 ~/opt/src/freetype-2.14.3
+    ./toolchain/build-xkbcommon.sh ~/opt/src/libxkbcommon-xkbcommon-1.13.2 /tmp/overlay
+    ./toolchain/stage-fonts.sh ~/opt/src/dejavu-fonts-ttf-2.37/ttf /tmp/overlay
+    ./toolchain/build-tests.sh /tmp/suite-c
+    make hd WAYLAND_CLIENTS=$PWD/clients ROOT_OVERLAYS=/tmp/overlay \
+        TEST_SUITES="/tmp/suite-c /tmp/suite-zlib /tmp/suite-fc"
+
+`bootstrap-fonts.sh` fetches every source, checks each tarball against the
+SHA-256 it was tested with, and builds gperf, which fontconfig runs while it
+builds. The order above is the order they need each other in; libxkbcommon
+needs none of them. On the image, `runtests /etc/fontconfig.tests` writes the
+font caches — fontconfig on Quark is the only thing that can.
+
+What each needed:
+
+- **zlib**: nothing of its own. Its `configure` adds `-fPIC` whatever it is
+  told, so the compiler wrapper now drops `-fPIC`, `-fpic`, `-fPIE`, `-fpie`
+  and `-pie` as it drops `-pthread` — the same GOT trap as meson's static PIC
+  above. The wrapper also rotates its arguments instead of re-parsing them with
+  `eval`, which lost the quoting of `-DFOO="a b"`.
+- **FreeType**: `-Dmmap=disabled`, which is a decision rather than a fix.
+  Nothing here is demand-paged, and a file cannot be mapped at all, so
+  FreeType's Unix stream would read every face whole before drawing a glyph;
+  the portable stream reads the tables it is asked for. `build-freetype.sh`
+  builds the same FreeType for the host as well, and `fttest` renders a line on
+  Quark to the host's checksum.
+- **expat**: the `config.sub` hunk, which is `teach-config-sub.sh` now and used
+  by libffi's script too, and a private copy of the tree, since the host's
+  expat is configured in place in the shared one. It salts its hash tables
+  from the time: Quark answers neither `getrandom` nor `/dev/urandom`.
+- **fontconfig**: one line in `fcstat.c`, which reads Linux's `f_type` only on
+  Linux and stops the build elsewhere (Quark's `struct statfs` is Linux's). It
+  installs through `DESTDIR`, because `--sysconfdir=/etc` would otherwise write
+  into this machine's `/etc`; the `conf.d` links are copied as files, and
+  `-Dadditional-fonts-dirs=no` keeps the build machine's X11 font directories
+  out of `fonts.conf`. Its cache writer found the last two gaps below.
+- **cairo**: its FreeType and fontconfig backends switched on. The host cairo
+  gets FreeType only, and gives `cairotext` its checksum.
+- **libxkbcommon**: the library alone, and no `xkeyboard-config`. A Wayland
+  client compiles the keymap the compositor sends, so the image carries just
+  that keymap, as `/usr/share/xkb/us.xkb`, for `xkbtest`.
+
+**The fonts.** `stage-fonts.sh` lays four DejaVu faces out in
+`/usr/share/fonts/dejavu` with their `LICENSE`: the fonts may be copied
+freely provided the notices go with every copy, and an image is a copy.
+`ROOT_OVERLAYS` copies such a tree over the stage, names and all, and takes it
+back out when unset. The ext2 and ext4 roots are filled by
+`tools/populate-ext.sh` in one debugfs run, which lowercases only Quark's own
+FAT-style names in `usr/bin` and `etc` and keeps `DejaVuSans.ttf` as it is.
+
+**Tests that need a `-I`.** A test whose library's headers are not directly
+under `include/` names its pkg-config modules on its first line instead of its
+libraries — `// PKG: freetype2`, `// PKG: cairo-ft cairo-fc` — and
+`build-tests.sh` asks pkg-config, in the musl prefix only.
+
+What the ports needed of the system, and got:
+
+- **Files that behave.** Paths up to 4095 bytes; creating, removing, renaming
+  and shortening files; `O_TRUNC`, `O_EXCL` and `O_DIRECTORY`; `stat` with
+  real inode numbers, link counts and times; `getdents64`, `statfs`,
+  `readlink`, `uname` and `getcwd`. The VFS protocol is written down in
+  `quark/docs/vfs.md`.
+- **A clock.** The kernel reads the CMOS clock at boot, so files are dated and
+  `time()` is the time. fontconfig compares dates to decide whether a cache is
+  stale, and `e2fsck` reads a small deletion time as something else entirely.
+- **`dup` on files.** fontconfig's configure looks for `mkostemp` without
+  `_GNU_SOURCE`, does not find it, and makes its lock with `mkstemp` and
+  `fcntl(F_DUPFD_CLOEXEC)` — which the layer refused for a file. Every cache
+  write failed, silently, and left a temporary file behind. Descriptors now
+  share an open file, as they do on Linux.
+- **A scheduler that does not lose a task.** With the caches failing,
+  fontconfig scanned every font twice, and about one run in two hung for good:
+  a call's hand-over reopened interrupts between marking the callee runnable
+  and switching to it, and a tick there left the callee in no queue. `dtest
+  calls` reproduces that in three seconds and has not seen it since the fix.
 
