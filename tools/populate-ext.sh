@@ -3,7 +3,7 @@
 #
 #     tools/populate-ext.sh <image> <stage-dir>
 #
-# Every staged directory under usr, etc and var is made, every symbolic link
+# Every staged directory under bin, usr, etc and var is made, every symbolic link
 # in them made with the target it has on the stage, and every file written.
 # Quark's own install names its files the way FAT wants them, HELLO.ELF and
 # PASSWD, in usr/bin and etc; there the image gets the names the shell and init
@@ -45,11 +45,11 @@ trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
 {
     # /dev is the VFS's, but listing / should show it.
     printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\n'
-    find usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
-    find usr etc var -type l 2>/dev/null | sort | while read -r l; do
+    find bin usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
+    find bin usr etc var -type l 2>/dev/null | sort | while read -r l; do
         printf 'symlink %s %s\n' "$l" "$(readlink "$l")"
     done
-    find usr etc var -type f 2>/dev/null | sort | while read -r f; do
+    find bin usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'write %s %s\n' "$f" "$(target "$f")"
     done
 } > "$CMDS"
@@ -61,10 +61,10 @@ if grep -v '^debugfs [0-9]' "$ERR" >&2; then
 fi
 
 {
-    find usr etc var -type f 2>/dev/null | sort | while read -r f; do
+    find bin usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'stat %s\n' "$(target "$f")"
     done
-    find usr etc var -type l 2>/dev/null | sort | sed 's/^/stat /'
+    find bin usr etc var -type l 2>/dev/null | sort | sed 's/^/stat /'
 } > "$CMDS"
 debugfs -f "$CMDS" "$IMG" > "$OUT" 2>&1 || true
 # The error names the path. The command echo that precedes it on stdout is
@@ -78,7 +78,7 @@ fi
 # Times last, when nothing else will write into a directory and move its own.
 {
     for kind in f l d; do
-        find usr etc var -type "$kind" 2>/dev/null | sort | while read -r p; do
+        find bin usr etc var -type "$kind" 2>/dev/null | sort | while read -r p; do
             name=$p
             [ "$kind" = f ] && name=$(target "$p")
             t=$(stat -c %Y "$p")

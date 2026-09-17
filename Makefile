@@ -77,7 +77,13 @@ stage: FORCE
 	$(MAKE) -C $(QUARK_DIR) install DESTDIR=$(CURDIR)/$(STAGE)
 	$(MAKE) -C $(BANG_DIR) build
 	@cp $(BANG_DIR)/BOOTX64.EFI $(STAGE)/BOOTX64.EFI
-	@mkdir -p $(STAGE)/home/root
+	@mkdir -p $(STAGE)/home/root $(STAGE)/bin
+	@# `/bin/sh` is where a program that starts a shell looks for one —
+	@# weston-terminal execs `$$SHELL` or this — and nothing in Quark's tree
+	@# decides where a distribution puts its shell. A copy rather than a link,
+	@# because FAT32 has none and the image is assembled for three
+	@# filesystems.
+	@cp $(STAGE)/usr/bin/QSH.ELF $(STAGE)/bin/sh
 	@# Runs either way: with no COREUTILS it takes back what a previous stage
 	@# put there, so unsetting it un-stages them.
 	@./tools/stage-coreutils.sh $(STAGE) $(COREUTILS)
@@ -136,10 +142,10 @@ $(ROOTFS_IMG): stage
 	mformat -i $(ROOTFS_IMG) -F ::
 	mmd -i $(ROOTFS_IMG) ::/dev
 	@cd $(STAGE) && \
-	find usr etc home -mindepth 0 -type d | sort | while read d; do \
+	find bin usr etc home -mindepth 0 -type d | sort | while read d; do \
 		mmd -i $(CURDIR)/$(ROOTFS_IMG) "::$$d" 2>/dev/null || true; \
 	done; \
-	find usr etc home -type f | while read f; do \
+	find bin usr etc home -type f | while read f; do \
 		mcopy -i $(CURDIR)/$(ROOTFS_IMG) "$$f" "::$$f"; \
 	done
 

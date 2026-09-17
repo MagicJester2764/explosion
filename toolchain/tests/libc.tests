@@ -16,3 +16,4 @@ forktest
 exectest
 ptytest
 timertest
+shelltest
