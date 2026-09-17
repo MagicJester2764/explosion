@@ -7,6 +7,7 @@ Operations, one per line:
     key <qcode[+qcode]>  press a named key, or a chord
     move <dx> <dy>       relative pointer motion, sent as a short stream
     click <button>       press and release, e.g. "left"
+    wheel <up|down> <n>  n detents of the scroll wheel
     shot <path>          screendump
     hmp <command>        a monitor command, its output printed: `hmp info
                          registers` says where a guest that stopped
@@ -117,6 +118,17 @@ for raw in open(script_path):
         cmd("input-send-event", events=[
             {"type": "btn", "data": {"down": False, "button": arg}}])
         time.sleep(0.08)
+    elif op == "wheel":
+        # A wheel is a button in QEMU's input model, not an axis: one detent is
+        # a press and a release of "wheel-up" or "wheel-down", which the PS/2
+        # mouse emulation turns into the Z byte of an IMPS/2 packet.
+        where, _, count = arg.partition(" ")
+        for _ in range(int(count or 1)):
+            cmd("input-send-event", events=[
+                {"type": "btn", "data": {"down": True, "button": "wheel-" + where}}])
+            cmd("input-send-event", events=[
+                {"type": "btn", "data": {"down": False, "button": "wheel-" + where}}])
+            time.sleep(0.08)
     elif op == "shot":
         cmd("screendump", filename=arg)
         print("shot", arg, flush=True)
