@@ -58,6 +58,11 @@ x86_64-quark-musl-gcc -O2 -o "$OUT/wlprobe" "$HERE/wlprobe.c" \
     "$OUT/xdg-shell-protocol.c" "$OUT/xdg-decoration-unstable-v1-protocol.c" \
     $INC $LIB
 
+# Without libwayland, which would refuse to send most of what this sends: it
+# writes the wire format itself, to see whether the compositor survives it.
+echo "==> wlfuzz"
+x86_64-quark-musl-gcc -O2 -o "$OUT/wlfuzz" "$HERE/wlfuzz.c"
+
 # Drawn with cairo, once build-cairo.sh has installed it, and written with the
 # font stack under it. Linked without the debug information cairo and pixman
 # were built with, which is four fifths of the file; the symbols stay, so a
