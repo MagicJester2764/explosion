@@ -1,4 +1,4 @@
-/* Files mapped into memory: private mappings here; shared ones in Task 11. */
+/* Files mapped into memory: private mappings, and shared ones. */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -56,6 +56,33 @@ int main(void) {
     check("nor written shared through a read-only descriptor",
           mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, ro, 0) == MAP_FAILED && errno == EACCES);
     close(ro);
+    close(fd);
+
+    printf("shared mappings:\n");
+    fd = open(F, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    check("a file of two pages", fd >= 0 && ftruncate(fd, 8192) == 0);
+    unsigned char *s1 = mmap(NULL, 8192, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    unsigned char *s2 = mmap(NULL, 8192, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    check("two shared mappings", s1 != MAP_FAILED && s2 != MAP_FAILED);
+    if (s1 != MAP_FAILED && s2 != MAP_FAILED) {
+        memcpy(s1 + 10, "shared", 6);
+        check("see each other's writes", !memcmp(s2 + 10, "shared", 6));
+        char got[6];
+        check("and read() sees them", pread(fd, got, 6, 10) == 6 && !memcmp(got, "shared", 6));
+        check("msync", msync(s1, 8192, MS_SYNC) == 0);
+        check("a write() shows in the mapping",
+              pwrite(fd, "PWRITE", 6, 4100) == 6 && !memcmp(s1 + 4100, "PWRITE", 6));
+        memcpy(s2 + 20, "after", 5);
+        munmap(s1, 8192);
+        munmap(s2, 8192);
+    }
+    close(fd);
+    fd = open(F, O_RDONLY);
+    char back[6];
+    check("what was written through a mapping is in the file",
+          pread(fd, back, 6, 10) == 6 && !memcmp(back, "shared", 6));
+    check("including what no msync asked for",
+          pread(fd, back, 5, 20) == 5 && !memcmp(back, "after", 5));
     close(fd);
     check("tidy up", unlink(F) == 0);
     printf("maptest: %s\n", failed ? "FAILED" : "ok");
