@@ -82,7 +82,8 @@ int main(void) {
     check("readlink of nothing is ENOENT", readlink("/no/such", link, sizeof link) == -1 && errno == ENOENT);
     char real[PATH_MAX];
     check("realpath resolves", realpath("/etc/../etc/passwd", real) && !strcmp(real, "/etc/passwd"));
-    check("the working directory is the root", getcwd(real, sizeof real) && !strcmp(real, "/"));
+    check("the working directory is where chdir put it",
+          chdir("/") == 0 && getcwd(real, sizeof real) && !strcmp(real, "/"));
     struct utsname u;
     check("uname says Quark", uname(&u) == 0 && !strcmp(u.sysname, "Quark") && !strcmp(u.machine, "x86_64"));
 
