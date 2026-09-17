@@ -5,3 +5,4 @@ ctortest
 mmaptest
 filetest
 dirtest
+threadfile
