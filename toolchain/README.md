@@ -227,16 +227,16 @@ What each needed:
   and `-pie` as it drops `-pthread` — the same GOT trap as meson's static PIC
   above. The wrapper also rotates its arguments instead of re-parsing them with
   `eval`, which lost the quoting of `-DFOO="a b"`.
-- **FreeType**: `-Dmmap=disabled`, which is a decision rather than a fix.
-  Nothing here is demand-paged, and a file cannot be mapped at all, so
-  FreeType's Unix stream would read every face whole before drawing a glyph;
-  the portable stream reads the tables it is asked for. `build-freetype.sh`
-  builds the same FreeType for the host as well, and `fttest` renders a line on
-  Quark to the host's checksum.
+- **FreeType**: `-Dmmap=enabled`. Its Unix stream maps each face, and a
+  mapped file is paged in as it is touched, so a line of text costs the tables
+  it reads. (It was disabled while no file could be mapped and memory was
+  backed when mapped, when that stream read every face whole.)
+  `build-freetype.sh` builds the same FreeType for the host as well, and
+  `fttest` renders a line on Quark to the host's checksum.
 - **expat**: the `config.sub` hunk, which is `teach-config-sub.sh` now and used
   by libffi's script too, and a private copy of the tree, since the host's
   expat is configured in place in the shared one. It salts its hash tables
-  from the time: Quark answers neither `getrandom` nor `/dev/urandom`.
+  with `getrandom`, which Quark answers from the kernel's generator.
 - **fontconfig**: one line in `fcstat.c`, which reads Linux's `f_type` only on
   Linux and stops the build elsewhere (Quark's `struct statfs` is Linux's). It
   installs through `DESTDIR`, because `--sysconfdir=/etc` would otherwise write

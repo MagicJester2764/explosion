@@ -6,13 +6,12 @@
 # Installs libfreetype.a, freetype2.pc and the headers, under
 # include/freetype2, into the musl prefix.
 #
-# -Dmmap=disabled is a decision, not a workaround. FreeType's Unix stream maps
-# the whole font, and where the mapping fails, as a file mapping does here, it
-# reads the whole font into memory instead. Quark backs memory when it is
-# mapped rather than when it is touched, so either way every face opened costs
-# all of its bytes before the first glyph: DejaVu Sans is 740 KiB, of which a
-# line of text uses a few tables. The portable stream seeks to what FreeType
-# asks for and reads that.
+# -Dmmap=enabled: FreeType's Unix stream maps the whole font, and Quark maps a
+# file a page at a time, as each is touched, so a face costs the tables a line
+# of text reads rather than all 740 KiB of DejaVu Sans. It was disabled while a
+# file could not be mapped and memory was backed when it was mapped: then the
+# stream read every face whole before the first glyph, and the portable stream,
+# which seeks to what it is asked for, was cheaper.
 #
 # PNG, brotli, bzip2 and HarfBuzz are off: nothing here needs colour glyphs,
 # WOFF2 or compressed bitmap fonts, and HarfBuzz is built on FreeType rather
@@ -36,7 +35,7 @@ sed -e "s|@WAYLAND_SCANNER@|/bin/false|" -e "s|@HOME@|$HOME|g" \
     "$HERE/meson-cross-quark.ini" > "$CROSS"
 
 OPTIONS="--buildtype=debugoptimized -Ddefault_library=static -Db_staticpic=false
-    --wrap-mode=nofallback -Dmmap=disabled -Dpng=disabled -Dbrotli=disabled
+    --wrap-mode=nofallback -Dmmap=enabled -Dpng=disabled -Dbrotli=disabled
     -Dbzip2=disabled -Dharfbuzz=disabled -Dtests=disabled"
 
 cd "$SRC"
