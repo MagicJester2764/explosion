@@ -47,6 +47,7 @@ static int frames;
 /* The size being drawn, and the size the compositor last asked for. A window
    here is whatever size it is told to be: the scene scales to fit it and the
    text band stays at the bottom. */
+static int running = 1;
 static int cw = W, ch = H;
 static int want_w = W, want_h = H;
 static int pending_resize;
@@ -123,8 +124,12 @@ static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w,
     pending_resize = 1;
 }
 
+/* The compositor says somebody clicked the close box. Nothing obliges a
+   client to go — a program with unsaved work is entitled to stay and ask —
+   but this one has nothing to lose, so it goes. */
 static void toplevel_close(void *data, struct xdg_toplevel *t) {
     (void)data; (void)t;
+    running = 0;
 }
 
 static const struct xdg_toplevel_listener toplevel_listener = {
@@ -359,7 +364,7 @@ int main(void) {
     }
 
     draw(0);
-    while (wl_display_dispatch(d) != -1) {
+    while (running && wl_display_dispatch(d) != -1) {
         ;
     }
     why(d);
