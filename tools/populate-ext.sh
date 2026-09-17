@@ -3,12 +3,13 @@
 #
 #     tools/populate-ext.sh <image> <stage-dir>
 #
-# Every staged directory under usr, etc and var is made, and every file in
-# them written. Quark's own install names its files the way FAT wants them,
-# HELLO.ELF and PASSWD, in usr/bin and etc; there the image gets the names the
-# shell and init look for, hello and passwd. Everywhere else, and for any name
-# with a lowercase letter in it, the staged name was chosen on purpose and is
-# kept: DejaVuSans.ttf, and the LICENSE beside it.
+# Every staged directory under usr, etc and var is made, every symbolic link
+# in them made with the target it has on the stage, and every file written.
+# Quark's own install names its files the way FAT wants them, HELLO.ELF and
+# PASSWD, in usr/bin and etc; there the image gets the names the shell and init
+# look for, hello and passwd. Everywhere else, and for any name with a
+# lowercase letter in it, the staged name was chosen on purpose and is kept:
+# DejaVuSans.ttf, and the LICENSE beside it. Links keep their staged names.
 #
 # debugfs exits 0 whatever happened, so its complaints are read instead, and
 # every file is looked for afterwards. Neither is enough alone: a write that
@@ -41,6 +42,9 @@ trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
     # /dev is the VFS's, but listing / should show it.
     printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\n'
     find usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
+    find usr etc var -type l 2>/dev/null | sort | while read -r l; do
+        printf 'symlink %s %s\n' "$l" "$(readlink "$l")"
+    done
     find usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'write %s %s\n' "$f" "$(target "$f")"
     done
@@ -52,9 +56,12 @@ if grep -v '^debugfs [0-9]' "$ERR" >&2; then
     exit 1
 fi
 
-find usr etc var -type f 2>/dev/null | sort | while read -r f; do
-    printf 'stat %s\n' "$(target "$f")"
-done > "$CMDS"
+{
+    find usr etc var -type f 2>/dev/null | sort | while read -r f; do
+        printf 'stat %s\n' "$(target "$f")"
+    done
+    find usr etc var -type l 2>/dev/null | sort | sed 's/^/stat /'
+} > "$CMDS"
 debugfs -f "$CMDS" "$IMG" > "$OUT" 2>&1 || true
 # The error names the path. The command echo that precedes it on stdout is
 # buffered, so the two do not reliably arrive in order.
