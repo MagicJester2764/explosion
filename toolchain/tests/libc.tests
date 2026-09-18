@@ -18,3 +18,6 @@ ptytest
 timertest
 shelltest
 cxxtest
+polltest
+gsync
+glibtest

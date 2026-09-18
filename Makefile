@@ -21,8 +21,9 @@ OVMF_PATH ?= $(BANG_DIR)/firmware-redist/ovmf
 STAGE := stage
 
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
-# nearly full without them.
-ROOTFS_SIZE_KB  := 65536
+# nearly full without them, and 64 MiB filled up the moment a program linked
+# glib statically -- one of those is four megabytes on its own.
+ROOTFS_SIZE_KB  := 131072
 BOOT_IMG_SIZE_KB := 1024
 
 BOOT_IMG        := boot.img
