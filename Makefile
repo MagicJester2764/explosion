@@ -97,6 +97,11 @@ stage: FORCE
 			n=$$((n + 1)); \
 		done; \
 		echo "wayland: staged $$n clients"; \
+		if [ -d "$(WAYLAND_CLIENTS)/share" ]; then \
+			mkdir -p $(STAGE)/usr/share; \
+			cp -r $(WAYLAND_CLIENTS)/share/* $(STAGE)/usr/share/; \
+			echo "wayland: staged the data its clients read"; \
+		fi; \
 	fi
 	@# A test suite is a directory of programs and the lists runtests reads.
 	@# Programs go where commands go; a list goes to /etc under its own name.

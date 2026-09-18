@@ -6,3 +6,9 @@ stage/
 *.bin
 *.iso
 iso/
+
+# The toytoolkit's objects and archive: intermediate, rebuilt by
+# toolchain/build-weston-toytoolkit.sh. The programs made from it are tracked,
+# the way the other clients are, so an image can be assembled without a cross
+# toolchain.
+clients/toytoolkit/

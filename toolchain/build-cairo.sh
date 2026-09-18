@@ -41,7 +41,7 @@ sed -e "s|@WAYLAND_SCANNER@|/bin/false|" -e "s|@HOME@|$HOME|g" \
 # takes as -O0.
 OPTIONS="--buildtype=debugoptimized -Ddefault_library=static -Db_staticpic=false
     --wrap-mode=nofallback
-    -Ddwrite=disabled -Dpng=disabled -Dquartz=disabled -Dtee=disabled
+    -Ddwrite=disabled -Dquartz=disabled -Dtee=disabled
     -Dxcb=disabled -Dxlib=disabled -Dxlib-xcb=disabled -Dzlib=disabled
     -Dlzo=disabled -Dglib=disabled -Dspectre=disabled
     -Dsymbol-lookup=disabled -Dgtk2-utils=disabled -Dgtk_doc=false
@@ -50,8 +50,11 @@ OPTIONS="--buildtype=debugoptimized -Ddefault_library=static -Db_staticpic=false
 cd "$SRC"
 rm -rf build-quark
 # shellcheck disable=SC2086
+# PNG is on for the target and off for the host build below: weston's
+# decorations call `cairo_image_surface_create_from_png`, and libpng is built
+# for this target. The host copy is only there to checksum a scene.
 meson setup build-quark --cross-file "$CROSS" --prefix="$PREFIX" $OPTIONS \
-    -Dfreetype=enabled -Dfontconfig=enabled
+    -Dpng=enabled -Dfreetype=enabled -Dfontconfig=enabled
 ninja -C build-quark
 ninja -C build-quark install
 echo
@@ -71,7 +74,7 @@ rm -rf "$HOST"
 # shellcheck disable=SC2086
 PKG_CONFIG_PATH="$HOST_PC" \
     meson setup "$HOST" --prefix="$HOST/root" --libdir=lib $OPTIONS \
-    $TEXT -Dfontconfig=disabled
+    -Dpng=disabled $TEXT -Dfontconfig=disabled
 ninja -C "$HOST"
 ninja -C "$HOST" install >/dev/null
 # cairo.pc names include/cairo; the tests include <cairo/cairo.h>.
