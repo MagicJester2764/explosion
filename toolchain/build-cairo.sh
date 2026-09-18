@@ -43,7 +43,7 @@ OPTIONS="--buildtype=debugoptimized -Ddefault_library=static -Db_staticpic=false
     --wrap-mode=nofallback
     -Ddwrite=disabled -Dquartz=disabled -Dtee=disabled
     -Dxcb=disabled -Dxlib=disabled -Dxlib-xcb=disabled -Dzlib=disabled
-    -Dlzo=disabled -Dglib=disabled -Dspectre=disabled
+    -Dlzo=disabled -Dspectre=disabled
     -Dsymbol-lookup=disabled -Dgtk2-utils=disabled -Dgtk_doc=false
     -Dtests=disabled"
 
@@ -53,8 +53,16 @@ rm -rf build-quark
 # PNG is on for the target and off for the host build below: weston's
 # decorations call `cairo_image_surface_create_from_png`, and libpng is built
 # for this target. The host copy is only there to checksum a scene.
+# glib is on for the target: `cairo-gobject` is a hard dependency of GTK, and
+# it is the only thing cairo's glib option builds.
+# glib's tools, native ones first: `glib-compile-resources` and
+# `glib-compile-schemas` are C programs, and the copies in the target prefix
+# are Quark binaries that cannot run here.
+HOSTDEPS=${QUARK_HOSTDEPS:-$HOME/opt/src/host-deps}
+PATH="$HOSTDEPS/bin:$PREFIX/bin:$PATH"
+export PATH
 meson setup build-quark --cross-file "$CROSS" --prefix="$PREFIX" $OPTIONS \
-    -Dpng=enabled -Dfreetype=enabled -Dfontconfig=enabled
+    -Dpng=enabled -Dfreetype=enabled -Dfontconfig=enabled -Dglib=enabled
 ninja -C build-quark
 ninja -C build-quark install
 echo
@@ -74,7 +82,7 @@ rm -rf "$HOST"
 # shellcheck disable=SC2086
 PKG_CONFIG_PATH="$HOST_PC" \
     meson setup "$HOST" --prefix="$HOST/root" --libdir=lib $OPTIONS \
-    -Dpng=disabled $TEXT -Dfontconfig=disabled
+    -Dpng=disabled $TEXT -Dfontconfig=disabled -Dglib=disabled
 ninja -C "$HOST"
 ninja -C "$HOST" install >/dev/null
 # cairo.pc names include/cairo; the tests include <cairo/cairo.h>.

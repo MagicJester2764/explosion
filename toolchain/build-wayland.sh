@@ -50,13 +50,24 @@ sed -e "s|@HOSTPREFIX@|$HOSTPREFIX|g" \
     "$HERE/meson-native-quark.ini" > /tmp/quark-native.ini
 
 rm -rf build-quark
-meson setup build-quark \
+meson setup build-quark --prefix="$PREFIX" \
     --cross-file /tmp/quark-cross.ini --native-file /tmp/quark-native.ini \
     -Dlibraries=true -Dscanner=false -Dtests=false \
     -Ddocumentation=false -Ddtd_validation=false -Ddefault_library=static \
     -Db_staticpic=false
 ninja -C build-quark
+# Installed as well as built, now that something looks for it through
+# pkg-config rather than naming the build directory: GTK asks for
+# `wayland-client`, `wayland-cursor` and `wayland-egl` by name. The clients
+# built here still name the build directory, which is why both exist.
+#
+# `libwayland-egl` is a set of symbols with nothing behind them — on a real
+# system Mesa's EGL replaces them — and that is the honest thing to install on
+# a machine with no GL: a program that calls one gets an error rather than a
+# missing symbol at link time.
+ninja -C build-quark install
 
 echo
 echo "built: build-quark/src/libwayland-client.a"
 echo "       build-quark/src/libwayland-server.a"
+echo "installed into $PREFIX"

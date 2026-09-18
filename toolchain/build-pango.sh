@@ -24,7 +24,11 @@ sed -e "s|@WAYLAND_SCANNER@|/bin/false|" -e "s|@HOME@|$HOME|g" \
     "$HERE/meson-cross-quark.ini" > "$CROSS"
 
 # glib's code generators, as for harfbuzz: they run here and write C.
-PATH="$PREFIX/bin:$PATH"
+# glib's tools, native ones first: `glib-compile-resources` and
+# `glib-compile-schemas` are C programs, and the copies in the target prefix
+# are Quark binaries that cannot run here.
+HOSTDEPS=${QUARK_HOSTDEPS:-$HOME/opt/src/host-deps}
+PATH="$HOSTDEPS/bin:$PREFIX/bin:$PATH"
 export PATH
 
 cd "$SRC"

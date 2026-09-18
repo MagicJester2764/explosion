@@ -28,7 +28,11 @@ sed -e "s|@WAYLAND_SCANNER@|/bin/false|" -e "s|@HOME@|$HOME|g" \
 # because that is where glib was installed — and without them on PATH meson
 # falls back to building glib's own subproject, which `--wrap-mode=nofallback`
 # does not prevent for a *program*.
-PATH="$PREFIX/bin:$PATH"
+# glib's tools, native ones first: `glib-compile-resources` and
+# `glib-compile-schemas` are C programs, and the copies in the target prefix
+# are Quark binaries that cannot run here.
+HOSTDEPS=${QUARK_HOSTDEPS:-$HOME/opt/src/host-deps}
+PATH="$HOSTDEPS/bin:$PREFIX/bin:$PATH"
 export PATH
 
 cd "$SRC"

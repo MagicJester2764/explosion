@@ -62,3 +62,27 @@ ninja -C build-quark
 ninja -C build-quark install
 echo
 echo "glib installed into $PREFIX"
+
+# The same glib for the build machine.
+#
+# Three of glib's tools are C programs rather than Python — `glib-compile-
+# resources`, `glib-compile-schemas` and `gio-querymodules` — and GTK's build
+# runs the first two to turn XML into C. The copies in the target prefix are
+# Quark binaries and cannot run here at all, so a native glib has to exist
+# beside the cross one. It goes where the host expat already lives.
+#
+# This one may use subprojects: the build machine has no pcre2 or libffi
+# development files, glib ships wraps for both, and nothing about a build tool
+# has to match what the target links.
+HOSTDEPS=${QUARK_HOSTDEPS:-$HOME/opt/src/host-deps}
+rm -rf build-host
+meson setup build-host --prefix="$HOSTDEPS" --libdir=lib \
+    --buildtype=release -Ddefault_library=static \
+    -Dselinux=disabled -Dxattr=false -Dlibmount=disabled \
+    -Dman-pages=disabled -Ddtrace=disabled -Dsystemtap=disabled \
+    -Dsysprof=disabled -Ddocumentation=false -Dintrospection=disabled \
+    -Dnls=disabled -Dlibelf=disabled -Dtests=false
+ninja -C build-host
+ninja -C build-host install
+echo
+echo "glib for this machine installed into $HOSTDEPS"

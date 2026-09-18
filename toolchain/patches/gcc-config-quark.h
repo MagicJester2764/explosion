@@ -59,6 +59,13 @@ along with GCC; see the file COPYING3.  If not see
     {						\
       builtin_define ("__quark__");		\
       builtin_define ("__ELF__");		\
+      /* Quark presents a Unix through musl and the translation layer, and	\
+	 portable code asks this rather than asking for a system by name.	\
+	 The Khronos EGL headers were the first to stop without it: their	\
+	 platform list has an arm for __unix__ and an #error after it.  */	\
+      builtin_define ("__unix__");		\
+      builtin_define ("__unix");			\
+      builtin_assert ("system=unix");		\
       builtin_assert ("system=quark");		\
     }						\
   while (false)
