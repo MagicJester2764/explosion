@@ -36,4 +36,13 @@ for dir in linux asm asm-generic; do
     cp -r "$SRC/$dir" "$SYSROOT/include/$dir"
 done
 
+# Except this one. `linux/dma-buf.h` describes sharing a buffer between
+# drivers by descriptor, which needs DRM, GEM and a graphics stack Quark has
+# none of. Every other header here describes something a program can *ask* for
+# and be told no; this one is asked at build time — `cc.has_header` — and a yes
+# makes a toolkit compile a path that cannot work. GTK's is the one that
+# noticed, and only because the same configure then failed to find libdrm and
+# left it without the modifier constant.
+rm -f "$SYSROOT/include/linux/dma-buf.h"
+
 echo "installed into $SYSROOT/include"
