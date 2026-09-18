@@ -28,8 +28,12 @@ pc() {
     PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR= \
         PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" pkg-config "$@"
 }
-for src in "$HERE"/tests/*.c; do
-    name=$(basename "$src" .c)
+for src in "$HERE"/tests/*.c "$HERE"/tests/*.cpp; do
+    [ -f "$src" ] || continue
+    case $src in
+    *.cpp) name=$(basename "$src" .cpp); cc=x86_64-quark-musl-g++ ;;
+    *)     name=$(basename "$src" .c);   cc=x86_64-quark-musl-gcc ;;
+    esac
     flags=$(sed -n '1s|^// LINK: ||p' "$src")
     pkgs=$(sed -n '1s|^// PKG: ||p' "$src")
     missing=
@@ -48,7 +52,10 @@ for src in "$HERE"/tests/*.c; do
     # shellcheck disable=SC2086
     [ -z "$pkgs" ] || flags="$flags $(pc --cflags --libs --static $pkgs)"
     echo "==> $name"
-    x86_64-quark-musl-gcc -O2 -o "$OUT/$name" "$src" $flags
+    # --strip-debug and not -s: the symbol table is what turns a faulting rip
+    # into a function name, and the DWARF behind a statically linked glib is
+    # ten megabytes the image has not got.
+    $cc -O2 -Wl,--strip-debug -o "$OUT/$name" "$src" $flags
 done
 # The lists runtests reads, staged beside the programs they name.
 cp "$HERE"/tests/*.tests "$OUT"/ 2>/dev/null || true

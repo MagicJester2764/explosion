@@ -50,9 +50,13 @@ mkdir -p build-gcc-quark && cd build-gcc-quark
 # musl runs .init_array, and configure only turns it on by itself for targets
 # it recognises. pixman builds its whole implementation table in a constructor,
 # which is how this was found: every composite came back "no function found".
+# C++ is here for harfbuzz, which is written in it, and for Qt, which is all of
+# it. Only the compiler: --disable-libstdcxx stays, because gcc's in-tree
+# libstdc++ would be built against the sysroot's C library, which has no
+# wchar.h and no threads. build-libstdcxx.sh builds it against musl instead.
 "$GCC_SRC/configure" --target=$TARGET --prefix="$PREFIX" \
     --with-sysroot="$SYSROOT" \
-    --enable-languages=c \
+    --enable-languages=c,c++ \
     --enable-initfini-array \
     --disable-nls --disable-shared --disable-threads \
     --disable-libssp --disable-libquadmath --disable-libatomic \
@@ -65,3 +69,6 @@ cd ..
 echo
 echo "Done. Add $PREFIX/bin to PATH, then:"
 echo "    x86_64-quark-gcc hello.c -o hello"
+echo
+echo "For C++, build musl (build-musl.sh) and then its standard library:"
+echo "    ./build-libstdcxx.sh $GCC_SRC"

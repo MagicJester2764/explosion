@@ -63,11 +63,17 @@ cat > "$PREFIX/lib/musl-quark.specs" <<SPECS
 *cc1:
 %(cc1_cpu) -nostdinc -isystem $PREFIX/include -isystem include%s -isystem $QUARK_SRC/user/libc/include
 
+# crtbegin.o and crtend.o are here for one thing: the first contributes the
+# empty .eh_frame the unwinder is handed and a constructor that registers it,
+# the second the zero word that ends it. A C++ program that throws walks that
+# table to find its handler, and without them the table has no beginning and
+# no end. They bracket everything else on the line, which is what makes the
+# table one run of frames rather than several.
 *startfile:
-$PREFIX/lib/crt1.o $PREFIX/lib/crti.o $QUARK_SRC/user/linux-abi/src/manifest.o
+$PREFIX/lib/crt1.o $PREFIX/lib/crti.o crtbegin.o%s $QUARK_SRC/user/linux-abi/src/manifest.o
 
 *endfile:
-$PREFIX/lib/crtn.o
+crtend.o%s $PREFIX/lib/crtn.o
 
 *lib:
 $PREFIX/lib/libc.a $QUARK_SRC/user/linux-abi/liblinux-abi.a
@@ -117,6 +123,34 @@ done
 exec x86_64-quark-gcc -specs="$PREFIX/lib/musl-quark.specs" "\$@"
 WRAP
 chmod +x "$BINDIR/x86_64-quark-musl-gcc"
+
+# The same wrapper for C++. The include directories have to be named: the specs
+# say -nostdinc, which takes away the compiler's own idea of where its headers
+# are, and the C++ ones are among them. They are where build-libstdcxx.sh
+# installs them, which is why the version is asked of the compiler rather than
+# written down.
+GCCVER=$(x86_64-quark-g++ -dumpversion 2>/dev/null || echo unknown)
+cat > "$BINDIR/x86_64-quark-musl-g++" <<WRAPXX
+#!/bin/sh
+# x86_64-quark, with musl and libstdc++.
+#
+# The argument rotation is the C wrapper's, for the same reasons; see it.
+n=\$#
+while [ "\$n" -gt 0 ]; do
+	a=\$1
+	shift
+	n=\$((n - 1))
+	case "\$a" in
+	-pthread|-fPIC|-fpic|-fPIE|-fpie|-pie) ;;
+	*) set -- "\$@" "\$a" ;;
+	esac
+done
+exec x86_64-quark-g++ -specs="$PREFIX/lib/musl-quark.specs" \
+	-isystem "$PREFIX/include/c++/$GCCVER" \
+	-isystem "$PREFIX/include/c++/$GCCVER/x86_64-quark" \
+	-isystem "$PREFIX/include/c++/$GCCVER/backward" "\$@"
+WRAPXX
+chmod +x "$BINDIR/x86_64-quark-musl-g++"
 
 echo
 echo "Done. Programs build with no flags at all:"

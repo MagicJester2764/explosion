@@ -51,6 +51,35 @@ than gcc being fussy: there was no `sys/types.h` and no `time.h`, and `stdio.h`
 had no `FILE` — `fprintf` took a descriptor. A library that cannot say
 `fprintf(stderr, ...)` is not one anybody can port to.
 
+## C++
+
+`build.sh` builds `c,c++`, which gives `x86_64-quark-g++` and `cc1plus`;
+`build-libstdcxx.sh` builds the standard library afterwards, against musl. The
+two are separate because gcc's in-tree libstdc++ would be built against the
+sysroot's C library — Quark's own `user/libc`, which is enough for libgcc and
+no more — and libstdc++ wants `wchar.h`, a locale and threads. libstdc++-v3
+configures on its own, so it is built like any other port: with the musl
+wrapper, for the musl prefix.
+
+The port needed three lines, in the usual places:
+
+- **`libstdc++-v3/crossconfig.m4`** (and the generated `configure`) list the
+  hosts libstdc++ knows how to be cross-built for, and an unknown one is
+  "No support for this host/target combination". `*-quark*` joins the Linux
+  arm, which is the truthful one: the C library underneath is musl.
+- **`libgcc/config.host`** builds `crtbegin.o` and `crtend.o` for quark. They
+  are not about constructors here — `--enable-initfini-array` puts those in
+  `.init_array` — but about `.eh_frame`: crtbegin contributes the empty frame
+  table the unwinder is handed and the constructor that registers it, crtend
+  the zero word that ends it.
+- **Quark's user link script** used to discard `.eh_frame`, which was free
+  while nothing unwound. The first C++ `throw` walked a table that was not
+  there and took a page fault instead of finding its handler.
+
+`tests/cxxtest.cpp` is the check: a constructor before `main`, the containers,
+a virtual call, a `dynamic_cast`, and an exception thrown through twenty frames
+and caught by type with a destructor run on the way out.
+
 ## musl
 
 `build-musl.sh` builds musl against the same target. It runs: a musl program
