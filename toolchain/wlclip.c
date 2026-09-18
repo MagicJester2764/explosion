@@ -308,8 +308,10 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* Wait to be offered the selection. The copier may not have set it yet. */
-    for (int i = 0; i < 60 && !have_selection; i++) {
+    /* Wait to be offered the selection. The copier may not have set it yet —
+       and when the copier is a terminal somebody is selecting text in, "not
+       yet" is however long it takes to start, draw and be dragged across. */
+    for (int i = 0; i < 400 && !have_selection; i++) {
         if (wl_display_roundtrip(d) == -1) {
             break;
         }

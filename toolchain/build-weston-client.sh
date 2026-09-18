@@ -77,14 +77,16 @@ echo "==> wlfuzz"
 x86_64-quark-musl-gcc -O2 -o "$OUT/wlfuzz" "$HERE/wlfuzz.c"
 
 # Drawn with cairo, once build-cairo.sh has installed it, and written with the
-# font stack under it. Linked without the debug information cairo and pixman
+# font stack under it. `-lpng16` because cairo is built with PNG support —
+# weston's decorations load their images through it — so everything that links
+# cairo links libpng. Linked without the debug information cairo and pixman
 # were built with, which is four fifths of the file; the symbols stay, so a
 # fault's address can still be named.
 if [ -f "$PREFIX/lib/libcairo.a" ]; then
     echo "==> wlcairo"
     x86_64-quark-musl-gcc -O2 -Wl,--strip-debug -o "$OUT/wlcairo" \
         "$HERE/wlcairo.c" "$OUT/xdg-shell-protocol.c" \
-        $INC -lcairo -lpixman-1 -lfontconfig -lfreetype -lexpat -lz -lm $LIB
+        $INC -lcairo -lpixman-1 -lfontconfig -lfreetype -lexpat -lpng16 -lz -lm $LIB
 fi
 
 if [ -n "$WESTON_SRC" ]; then
