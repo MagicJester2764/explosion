@@ -252,7 +252,11 @@ cd: fat.img
 # as "this is an emulator", which is the wrong thing to have to work out.
 KVM := $(shell test -w /dev/kvm && echo -enable-kvm)
 
-QEMU_FLAGS = $(KVM) -cpu max -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
+# -m 1G, not QEMU's default 128 MiB. A program that links a toolkit is tens of
+# megabytes, and a spawner reads the whole image into its own memory before
+# giving the pages to the child — so the same program is in memory twice while
+# it starts. Nothing here is paged out, either.
+QEMU_FLAGS = $(KVM) -cpu max -m 1G -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
              -device rtl8139,netdev=n -netdev user,id=n
 
 run: hd

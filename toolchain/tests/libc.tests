@@ -21,3 +21,5 @@ cxxtest
 polltest
 gsync
 glibtest
+hbtest
+pangotest

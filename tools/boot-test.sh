@@ -38,7 +38,9 @@ cp ../bang/firmware-redist/ovmf/OVMF_VARS.fd "$RUN/OVMF_VARS.fd"
 [ -f "$RUN/echo.pid" ] && kill "$(cat "$RUN/echo.pid")" 2>/dev/null
 python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &
 echo $! > "$RUN/echo.pid"
-qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max \
+# -m 1G for the reason the Makefile gives: a toolkit-linked program is tens of
+# megabytes and is in memory twice while it is being started.
+qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max -m 1G \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
