@@ -3,15 +3,16 @@
 A Quark meta-distro. This is where the system is assembled and run.
 
 ```
-../quark    the microkernel and the programs that run on it
-../bang     the UEFI bootloader
-./          this: staging, image assembly, QEMU targets
+../quark        the microkernel
+../quarkutils   the programs that run on it
+../bang         the UEFI bootloader
+./              this: staging, image assembly, QEMU targets
 ```
 
 ## Build and run
 
 ```bash
-make stage   # build ../quark and ../bang, collect artifacts into stage/
+make stage   # build ../quark, ../quarkutils and ../bang, collect into stage/
 make hd      # assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 make run     # boot it in QEMU
 ```
@@ -27,17 +28,24 @@ also cleans the trees next door.
 `make stage` collects into `stage/`:
 
 ```
-stage/kernel.bin      the kernel, loaded by Bang
-stage/BOOTX64.EFI     Bang itself, installed to the ESP
-stage/drivers/        modules Bang hands the kernel, plus init.elf
-stage/boot/           essential services, packed into boot.img
-stage/usr/bin/        everything else, packed into the root filesystem
-stage/etc/            passwd
+stage/kernel.bin      the kernel, loaded by Bang                    (quark)
+stage/drivers/        modules Bang hands the kernel…                (quark)
+                      …plus init.elf                                (quarkutils)
+stage/usr/include/quark/abi.h   the system call numbers             (quark)
+stage/usr/share/doc/quark/abi.md  and what they mean                (quark)
+stage/boot/           essential services, packed into boot.img      (quarkutils)
+stage/usr/bin/        everything else, packed into the root         (quarkutils)
+stage/etc/            passwd                                        (quarkutils)
+stage/BOOTX64.EFI     Bang itself, installed to the ESP             (bang)
 ```
 
-Quark produces all of that through `make -C ../quark install DESTDIR=…`, so
-nothing here reaches into its source tree, and nothing there knows an image
-exists.
+The kernel and the userland each produce their share through
+`make install DESTDIR=…`, so nothing here reaches into a source tree, and
+nothing there knows an image exists. The kernel goes first: the userland checks
+its own copy of the system call numbers against the header the kernel has just
+installed, and here — where both are present — a missing header is an error
+rather than a skipped check. That stage directory is the only place the two
+repositories meet.
 
 ## Packages
 

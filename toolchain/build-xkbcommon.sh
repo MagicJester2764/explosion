@@ -4,7 +4,7 @@
 #     ./build-xkbcommon.sh /path/to/libxkbcommon-xkbcommon-1.13.2 <overlay-dir>
 #
 # Installs libxkbcommon.a, xkbcommon.pc and the headers into the musl prefix,
-# and copies the compositor's keymap (quark/user/wm/src/us.xkb) to
+# and copies the compositor's keymap (quarkutils/wm/src/us.xkb) to
 # <overlay-dir>/usr/share/xkb/us.xkb, for ROOT_OVERLAYS and xkb.tests.
 #
 # No xkeyboard-config comes with it. A Wayland client is sent a whole keymap
@@ -22,7 +22,7 @@ SRC=${1:?$USAGE}
 OVERLAY=${2:?$USAGE}
 HERE=$(cd "$(dirname "$0")" && pwd)
 PREFIX=${PREFIX:-$HOME/opt/cross/x86_64-quark/musl}
-KEYMAP=$HERE/../../quark/user/wm/src/us.xkb
+KEYMAP=${QUARKUTILS_DIR:-$HERE/../../quarkutils}/wm/src/us.xkb
 [ -f "$KEYMAP" ] || { echo "build-xkbcommon.sh: no $KEYMAP" >&2; exit 1; }
 mkdir -p "$OVERLAY"
 OVERLAY=$(cd "$OVERLAY" && pwd)

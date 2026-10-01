@@ -12,7 +12,7 @@
 #
 #     ./build.sh /path/to/binutils-gdb /path/to/gcc
 #
-# Needs the sysroot populated first, which is `make -C ../../quark/user/libc
+# Needs the sysroot populated first, which is `make -C ../../quarkutils/libc
 # install-sysroot`. gcc's own support library is compiled against those
 # headers, so they have to be there before this runs.
 set -e

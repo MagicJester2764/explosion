@@ -3,7 +3,7 @@
 #
 #     ./install-linux-headers.sh [source-include-dir]
 #
-# Quark answers Linux system calls -- that is what user/linux-abi is -- so a
+# Quark answers Linux system calls -- that is what quarkutils' linux-abi is -- so a
 # program built for it is a Linux program, and Linux programs include
 # <linux/input.h> for the key codes, <linux/dma-buf.h> for the ioctls, and so
 # on. These are the kernel's uapi headers: constants and structure layouts,

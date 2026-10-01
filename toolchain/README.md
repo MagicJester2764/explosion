@@ -7,7 +7,7 @@ Quark, installed under `~/opt/cross` by default.
 
 Quark is x86-64 and so is every machine this has been built on, so
 `-ffreestanding -nostdlib` plus our own headers already produced working
-binaries — that is how `user/libc` and the programs against it were built
+binaries — that is how quarkutils' `libc` and the programs against it were built
 before this existed.
 
 What a target triple buys is that the compiler knows the answers itself. A
@@ -42,7 +42,7 @@ Small and in the usual places, the same shape as any other OS target:
 
 ## The sysroot
 
-`make -C ../../quark/user/libc install-sysroot` puts the headers, `libc.a`,
+`make -C ../../quarkutils/libc install-sysroot` puts the headers, `libc.a`,
 `crt0.o` and the link script where the toolchain looks. It has to run *before*
 `build.sh`, because gcc compiles its own support library against those headers.
 
@@ -56,7 +56,7 @@ had no `FILE` — `fprintf` took a descriptor. A library that cannot say
 `build.sh` builds `c,c++`, which gives `x86_64-quark-g++` and `cc1plus`;
 `build-libstdcxx.sh` builds the standard library afterwards, against musl. The
 two are separate because gcc's in-tree libstdc++ would be built against the
-sysroot's C library — Quark's own `user/libc`, which is enough for libgcc and
+sysroot's C library — the hand-written `libc` in quarkutils, enough for libgcc and
 no more — and libstdc++ wants `wchar.h`, a locale and threads. libstdc++-v3
 configures on its own, so it is built like any other port: with the musl
 wrapper, for the musl prefix.
@@ -92,7 +92,7 @@ assembly files that issue `syscall` themselves are pointed at the same layer;
 and `crt_arch.h` builds the argc/argv/environment/auxv block musl expects to
 find on its stack out of the page Quark's spawner maps instead.
 
-The layer itself is `quark/user/linux-abi`. It is mostly an IPC client wearing
+The layer itself is `quarkutils/linux-abi`. It is mostly an IPC client wearing
 Linux's numbers: on a microkernel, `write` to a descriptor is a message to
 whatever is on the other end of it, and `open` is a message to the VFS. Where
 there is no equivalent it returns `-ENOSYS` rather than pretending — a libc
@@ -102,6 +102,16 @@ told "no" copes, and one handed a lie fails somewhere unrelated and much later.
 wrapper, so musl is a choice the compiler knows how to make rather than a pile
 of flags every build system would have to be told. That is what makes the next
 part possible at all.
+
+The writing is `musl-wrappers.sh`, a script of its own, because the specs name
+three things inside the userland's checkout by absolute path: the C library's
+headers, `manifest.o` and `liblinux-abi.a`. Every musl program is linked
+against whatever is at those paths *now* — which is why the userland's `make`
+builds the layer even though nothing there links it — so when the checkout
+moves, the specs have to be written again and musl does not have to be built
+again. It has moved once: `quark/user/` became `quarkutils/`. Run
+`./musl-wrappers.sh`, with `QUARKUTILS_DIR` set if the userland is not the
+sibling `../../quarkutils`.
 
 ## coreutils
 
@@ -347,7 +357,7 @@ tests, one per lie a port has caught it telling), `zlib.tests`,
 `xkb.tests`. `selftest.tests` is runtests testing itself: four lines that pass
 and three that must fail.
 
-**`fuzz.tests` and `qfuzz`.** `qfuzz ROUNDS [SEED]` (in `quark/user/qfuzz`)
+**`fuzz.tests` and `qfuzz`.** `qfuzz ROUNDS [SEED]` (in `quarkutils/qfuzz`)
 sends every registered service requests built from a seed — tags from its own
 protocol, from the range the kernel's notices use, and from anywhere; words
 small, handle-sized, huge and random; with and without a buffer lent and a

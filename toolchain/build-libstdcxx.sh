@@ -7,7 +7,7 @@
 # writes the `x86_64-quark-musl-g++` wrapper) to have run.
 #
 # gcc's own build cannot do this. Its target C library is the sysroot's, which
-# is Quark's hand-written `user/libc` -- enough to compile libgcc and no more,
+# is the hand-written `libc` in quarkutils -- enough to compile libgcc and no more,
 # with no wchar.h, no locale and no threads. libstdc++-v3 configures on its
 # own, so it is built here like any other port: with the musl wrapper, for the
 # musl prefix, seeing nothing of the other sysroot.

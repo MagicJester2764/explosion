@@ -1,18 +1,20 @@
 # ExplOSion — a Quark meta-distro.
 #
-# This is where the system is assembled and run. Quark builds a kernel and the
-# programs that run on it; Bang builds a bootloader; neither knows what an image
-# looks like. ExplOSion stages both and turns them into something bootable.
+# This is where the system is assembled and run. Quark builds a kernel,
+# quarkutils builds the programs that run on it and Bang builds a bootloader;
+# none of them knows what an image looks like. ExplOSion stages all three and
+# turns them into something bootable.
 #
-#   make stage   collect artifacts from ../quark and ../bang into stage/
+#   make stage   collect artifacts from ../quark, ../quarkutils and ../bang
 #   make hd      assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 #   make run     boot it in QEMU
 #
 # Nothing here is reached into by its neighbours: the dependency runs one way,
-# from the distro down to the kernel and the bootloader.
+# from the distro down to the kernel, the userland and the bootloader.
 
-QUARK_DIR ?= ../quark
-BANG_DIR  ?= ../bang
+QUARK_DIR      ?= ../quark
+QUARKUTILS_DIR ?= ../quarkutils
+BANG_DIR       ?= ../bang
 
 # The firmware lives in Bang because that is what needs it to exist; point this
 # at /usr/share/OVMF instead if you would rather use the system copy.
@@ -71,11 +73,19 @@ all: hd
 # Staging
 # ---------------------------------------------------------------------------
 
-# `make -C ../quark install` lays out kernel.bin, drivers/, boot/, usr/bin/ and
-# etc/ for us. Bang contributes only BOOTX64.EFI.
+# The kernel installs kernel.bin, its two modules and its ABI; the userland
+# installs drivers/init.elf, boot/, usr/bin/ and etc/. Bang contributes only
+# BOOTX64.EFI.
+#
+# In that order, and into one directory, which is the whole of how the two meet:
+# the userland checks its own copy of the system call numbers against the
+# header the kernel has just put in the stage, and REQUIRE_ABI makes a missing
+# header an error rather than a skipped check. Neither repository names the
+# other; this is the only place that knows there are two.
 stage: FORCE
 	@mkdir -p $(STAGE)
 	$(MAKE) -C $(QUARK_DIR) install DESTDIR=$(CURDIR)/$(STAGE)
+	$(MAKE) -C $(QUARKUTILS_DIR) install DESTDIR=$(CURDIR)/$(STAGE) REQUIRE_ABI=1
 	$(MAKE) -C $(BANG_DIR) build
 	@cp $(BANG_DIR)/BOOTX64.EFI $(STAGE)/BOOTX64.EFI
 	@mkdir -p $(STAGE)/home/root $(STAGE)/bin
@@ -280,6 +290,7 @@ clean:
 # Also clean the trees we build from.
 distclean: clean
 	$(MAKE) -C $(QUARK_DIR) clean
+	$(MAKE) -C $(QUARKUTILS_DIR) clean
 	$(MAKE) -C $(BANG_DIR) clean
 
 FORCE:
