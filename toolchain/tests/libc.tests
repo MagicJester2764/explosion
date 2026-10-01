@@ -21,6 +21,7 @@ ptytest
 ttytest
 sigtest
 pidtest
+alarmtest
 timertest
 shelltest
 cxxtest

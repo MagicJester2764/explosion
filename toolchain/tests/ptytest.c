@@ -10,8 +10,10 @@
 #include <poll.h>
 #include <pty.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -51,6 +53,29 @@ int main(void) {
     check("two descriptors of its own", master != slave && master >= 0 && slave >= 0);
     check("the slave is a terminal", isatty(slave));
     check("and so is the master", isatty(master));
+
+    /* A terminal has a name, which is the path it is opened by: what `tty`
+       prints, and what a program hands to another to say where to write. */
+    char *called = ttyname(slave);
+    char *pts = ptsname(master);
+    check("the slave has a name", called != NULL);
+    check("the one its master says it has", called && pts && !strcmp(called, pts));
+    struct stat by_name, by_fd, by_copy;
+    int copy = dup(slave);
+    check("the name and the descriptor are one file",
+          called && stat(called, &by_name) == 0 && fstat(slave, &by_fd) == 0
+              && by_name.st_dev == by_fd.st_dev && by_name.st_ino == by_fd.st_ino
+              && S_ISCHR(by_fd.st_mode));
+    check("and so are two descriptors for it",
+          copy >= 0 && fstat(copy, &by_copy) == 0 && by_copy.st_dev == by_fd.st_dev
+              && by_copy.st_ino == by_fd.st_ino);
+    close(copy);
+    int ends[2];
+    errno = 0;
+    check("a pipe is not a terminal and has no such name",
+          pipe(ends) == 0 && ttyname(ends[0]) == NULL && errno == ENOTTY);
+    close(ends[0]);
+    close(ends[1]);
 
     /* Typing: what is written to the master is what the program in the
        terminal reads. In canonical mode it arrives a line at a time. */
