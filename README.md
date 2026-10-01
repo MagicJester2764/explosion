@@ -97,6 +97,12 @@ After the overlays, staging builds fontconfig's caches for whatever fonts are
 there (`tools/stage-font-caches.sh`), and writes `/etc/hostile.tests`: every
 staged program with sixteen sets of arguments nobody would give it on purpose.
 
+An overlay is also how a session gets a terminal. `init` starts `login`
+straight onto the console unless `/etc/init.conf` names something else, and an
+overlay holding `etc/init.conf` with the one line `session /usr/bin/getty` has
+it start `getty`, which runs `login` on the console's pseudo-terminal — where
+`isatty` is true and Ctrl-D ends a file.
+
 ## The cross toolchain
 
 `toolchain/` builds `x86_64-quark-gcc` and, with it, musl, libstdc++,
