@@ -21,6 +21,12 @@ Operations, one per line:
     transcript <path>    everything the console has shown while this was
                          looking — at each `expect`, `text` and `transcript` —
                          joined where one screen overlaps the next
+    saw <regex>          some line the console has shown matches. What a
+                         command printed is the test of it; one that printed
+                         something else fails the run and says what was looked
+                         for.
+    off <seconds>        wait for the machine to turn itself off. Nothing
+                         after this runs: there is nothing left to type at.
     hmp <command>        a monitor command, its output printed: `hmp info
                          registers` says where a guest that stopped
                          answering is spending its time
@@ -29,7 +35,8 @@ Operations, one per line:
 The timing lives here rather than in the shell that calls it: a foreground
 sleep in a tool call is blocked by the harness.
 
-Exits 1 if an `expect` gave up.
+Exits 1 if an `expect` gave up, a `saw` saw nothing, or the machine was
+still on when `off` stopped waiting.
 """
 import json
 import os
@@ -201,6 +208,30 @@ for raw in open(script_path):
                 FAILED = True
                 break
             time.sleep(0.2)
+    elif op == "saw":
+        lines = SEEN + screen()
+        if not any(re.search(arg, line) for line in lines):
+            print("saw: nothing the console showed matches", arg, flush=True)
+            FAILED = True
+    elif op == "off":
+        deadline = time.time() + float(arg)
+        gone = False
+        while time.time() < deadline:
+            # A machine that has turned itself off has closed this socket.
+            try:
+                if cmd("query-status") is None:
+                    gone = True
+                    break
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                gone = True
+                break
+            time.sleep(0.5)
+        if not gone:
+            print("off: still running after", arg, "s", flush=True)
+            FAILED = True
+        else:
+            print("off", flush=True)
+        break
     elif op == "text":
         with open(arg, "w") as out:
             out.write("\n".join(screen()) + "\n")
@@ -217,4 +248,9 @@ for raw in open(script_path):
     elif op == "quit":
         cmd("quit")
 print("done", flush=True)
+# The socket may be the machine's that has just turned itself off.
+try:
+    f.close()
+except OSError:
+    pass
 sys.exit(1 if FAILED else 0)
