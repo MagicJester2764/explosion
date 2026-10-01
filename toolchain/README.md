@@ -120,8 +120,9 @@ A filesystem that is mounted is its file server's, and so cannot be opened
 to write: `mke2fs -F` on the disk the system is running from gets "Resource
 busy", which `mkfstest` checks along with the rest (`fstools.tests`).
 
-e2fsprogs' two print one complaint until mounts are written down where they
-look: "Can't check if filesystem is mounted due to missing mtab file".
+Both read `/etc/mtab` to refuse a disk with a mounted filesystem by name,
+before they get as far as being refused it; `init` writes that file at boot
+and `mount` and `umount` keep it.
 
 ## Putting them in an image
 
