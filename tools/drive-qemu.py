@@ -12,6 +12,15 @@ Operations, one per line:
     release <button>     let go
     wheel <up|down> <n>  n detents of the scroll wheel
     shot <path>          screendump
+    expect <seconds> <regex>
+                         wait until the last line on the text console matches:
+                         a prompt, usually, which is how a script knows the
+                         command before it has finished. Gives up after that
+                         many seconds, says so, and the run fails.
+    text <path>          the text console's screen, as text
+    transcript <path>    everything the console has shown while this was
+                         looking — at each `expect`, `text` and `transcript` —
+                         joined where one screen overlaps the next
     hmp <command>        a monitor command, its output printed: `hmp info
                          registers` says where a guest that stopped
                          answering is spending its time
@@ -19,11 +28,17 @@ Operations, one per line:
 
 The timing lives here rather than in the shell that calls it: a foreground
 sleep in a tool call is blocked by the harness.
+
+Exits 1 if an `expect` gave up.
 """
 import json
+import os
+import re
 import socket
 import sys
 import time
+
+import screentext
 
 sock_path, script_path = sys.argv[1], sys.argv[2]
 
@@ -54,6 +69,33 @@ def cmd(name, **args):
 
 
 cmd("qmp_capabilities")
+
+# Reading the screen: a screendump beside the socket, and the font the console
+# draws with. The font is loaded the first time something asks, so a script
+# that only types and takes pictures needs no userland checkout.
+GLYPHS = None
+SEEN = []
+SCRATCH = os.path.join(os.path.dirname(os.path.abspath(sock_path)), "screen.ppm")
+FAILED = False
+
+
+def screen():
+    """What the text console shows now; also written into the transcript."""
+    global GLYPHS
+    if GLYPHS is None:
+        GLYPHS = screentext.load_font()
+    lines = []
+    # A dump taken while the guest changes mode can be short. Look again.
+    for _ in range(5):
+        cmd("screendump", filename=SCRATCH)
+        try:
+            lines = screentext.screen_lines(SCRATCH, GLYPHS)
+            break
+        except (OSError, ValueError, IndexError):
+            time.sleep(0.2)
+    if lines:
+        screentext.merge(SEEN, lines)
+    return lines
 
 SHIFTED = {
     "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6",
@@ -146,6 +188,28 @@ for raw in open(script_path):
     elif op == "shot":
         cmd("screendump", filename=arg)
         print("shot", arg, flush=True)
+    elif op == "expect":
+        seconds, _, pattern = arg.partition(" ")
+        deadline = time.time() + float(seconds)
+        while True:
+            lines = screen()
+            if lines and re.search(pattern, lines[-1]):
+                break
+            if time.time() >= deadline:
+                print("expect: gave up after", seconds, "s waiting for", pattern, flush=True)
+                print("        the last line was:", repr(lines[-1] if lines else ""), flush=True)
+                FAILED = True
+                break
+            time.sleep(0.2)
+    elif op == "text":
+        with open(arg, "w") as out:
+            out.write("\n".join(screen()) + "\n")
+        print("text", arg, flush=True)
+    elif op == "transcript":
+        last = screen()
+        with open(arg, "w") as out:
+            out.write("\n".join(SEEN + last[-1:]) + "\n")
+        print("transcript", arg, flush=True)
     elif op == "hmp":
         reply = cmd("human-monitor-command", **{"command-line": arg})
         print("hmp", arg, flush=True)
@@ -153,3 +217,4 @@ for raw in open(script_path):
     elif op == "quit":
         cmd("quit")
 print("done", flush=True)
+sys.exit(1 if FAILED else 0)

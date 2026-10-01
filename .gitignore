@@ -12,3 +12,6 @@ iso/
 # the way the other clients are, so an image can be assembled without a cross
 # toolchain.
 clients/toytoolkit/
+
+# What Python leaves beside the tools it imports.
+__pycache__/

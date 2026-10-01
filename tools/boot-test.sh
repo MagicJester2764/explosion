@@ -8,7 +8,11 @@
 #
 # Verification here is boot-in-QEMU: user-space `println!` goes to the
 # framebuffer and not to serial, so a screendump is the output and serial only
-# catches kernel faults.
+# catches kernel faults. The text console's screen can be read back as text
+# (`tools/screentext.py`), which is what a script's `expect`, `text` and
+# `transcript` lines do: wait for a prompt, and keep what was printed.
+#
+# Exits 1 if an `expect` gave up or the kernel faulted.
 #
 # Two things worth not rediscovering:
 #
@@ -50,7 +54,10 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu max -m 1G \
   -serial file:"$RUN/serial.log" 2>/dev/null &
 echo $! > "$RUN/qemu.pid"
 
-python3 "$HERE/drive-qemu.py" "$RUN/qmp.sock" "$1" || true
+# The script's `expect` lines are the test: one that gave up is a failure, and
+# so is a fault in the kernel. Both are reported after the tidying up.
+status=0
+python3 "$HERE/drive-qemu.py" "$RUN/qmp.sock" "$1" || status=1
 kill "$(cat "$RUN/qemu.pid")" 2>/dev/null || true
 kill "$(cat "$RUN/echo.pid")" 2>/dev/null || true
 rm -f "$RUN/qemu.pid" "$RUN/echo.pid"
@@ -58,5 +65,7 @@ rm -f "$RUN/qemu.pid" "$RUN/echo.pid"
 if grep -aq "KFAULT\|PANIC" "$RUN/serial.log" 2>/dev/null; then
     echo "KERNEL FAULT:"
     grep -a "KFAULT\|PANIC" "$RUN/serial.log"
+    status=1
 fi
 echo "serial: $RUN/serial.log"
+exit $status

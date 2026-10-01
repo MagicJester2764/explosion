@@ -113,7 +113,9 @@ account of all of it.
 ## Testing
 
 Verification is a boot. A program's output goes to the framebuffer rather than
-to the serial line, so the result of a test is a screenshot.
+to the serial line, so the result of a test is what is on the screen: a
+screenshot, or — because the text console draws one font on a grid — the same
+screen read back as text.
 
 ```bash
 tools/boot-test.sh keys.txt shot.ppm     # boot, type, take the picture
@@ -122,8 +124,12 @@ tools/crash-test.sh                      # stop the machine mid-write; recover
 ```
 
 `boot-test.sh` drives QEMU over QMP from a script of operations — `type`,
-`key`, `sleep`, `move`, `press`, `shot`, `quit` — and serves an echo on the
-host for the network tests to reach. `IMG` and `RUNDIR` let an ext2 boot and an
+`key`, `sleep`, `move`, `press`, `shot`, `quit`, and `expect`, which waits
+until the last line on the console matches (a prompt, usually) instead of
+for a number of seconds — and serves an echo on the host for the network
+tests to reach. `transcript` writes down everything the console showed, and
+`tools/screentext.py` reads any screenshot of it. The script fails if an
+`expect` gave up or the kernel faulted. `IMG` and `RUNDIR` let an ext2 boot and an
 ext4 boot run side by side. `check-rootfs.sh` runs `e2fsck` from the host on
 the image a boot has just used, which is the check for any change to the file
 server: it has found what reading the code did not.

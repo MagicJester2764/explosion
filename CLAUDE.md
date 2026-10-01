@@ -60,7 +60,11 @@ make run       # boot it                         (run-ext4, run-fat32)
 ## Testing
 
 A program's output goes to the framebuffer, not the serial line. The result of
-a test is a screenshot; serial only shows kernel faults.
+a test is what is on the screen; serial only shows kernel faults. The text
+console's screen can be read back as text — it draws one bitmap font on a
+grid, so a screendump of it is its text exactly (`tools/screentext.py`) — and
+that is what lets a test wait for a prompt and keep what was printed, instead
+of sleeping for a guess and looking at a picture.
 
 ```bash
 tools/boot-test.sh <keys-file> <shot.ppm>     # IMG=… RUNDIR=… for a second boot
@@ -70,8 +74,17 @@ tools/crash-test.sh                           # stop mid-write, recover, check
 
 A keys file is one operation per line (`tools/drive-qemu.py` has the list):
 `sleep`, `type`, `key`, `move dx dy [n]`, `click`, `press`, `release`, `wheel`,
-`shot`, `hmp`, `quit`.
+`shot`, `expect`, `text`, `transcript`, `hmp`, `quit`. `boot-test.sh` exits 1
+if an `expect` gave up or the kernel faulted.
 
+- **`expect <seconds> <regex>` matches the last line on the screen**, which
+  after a command is its output until it finishes and the prompt when it has.
+  `expect 300 \$$` after `type dtest\n` is "wait for dtest". A window is not
+  text; under a compositor it is `sleep` and `shot` again.
+- **`transcript <path>` is everything the console showed while the script was
+  looking**, joined where one screen overlaps the next. Where the console
+  scrolled a whole screen between two looks there is a `[...]`: what a test
+  must not miss, it prints last.
 - **`move` sends its delta `n` times, eight by default.** `move 10 10` moves
   eighty pixels. To put the pointer somewhere, run it into a corner
   (`move -300 -200 8`) and then make one step of the distance wanted
