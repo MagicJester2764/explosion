@@ -4,22 +4,17 @@ A Quark meta-distro. This is where the system is assembled and run, and where
 other people's software is built for it.
 
 ```
-../quark        the microkernel
-../quarkutils   the programs that run on it
-../bang         the UEFI bootloader
-./              this: staging, image assembly, QEMU targets, the cross
-                toolchain and every port built with it
+../quark            the microkernel
+../quarkutils       the programs that run on it
+../bang             the UEFI bootloader
+../quark-toolchain  the cross compilers, for the ports
+./                  this: staging, image assembly, QEMU targets, and every
+                    port of somebody else's software
 ```
 
 The dependency runs one way. ExplOSion reaches down to the three trees beside
 it; none of them knows it exists, and none of them knows what an image looks
 like.
-
-There is a second distribution of Quark,
-[GNU/Quark](https://github.com/MagicJester2764/gnu-quark): the same kernel
-under GNU's bash and coreutils, with a fixed list of what is in it. It builds
-its packages with the cross toolchain made here (`toolchain/`), and tests
-itself with a copy of this tree's driver.
 
 ## Build and run
 
@@ -109,10 +104,11 @@ overlay holding `etc/init.conf` with the one line `session /usr/bin/getty` has
 it start `getty`, which runs `login` on the console's pseudo-terminal — where
 `isatty` is true and Ctrl-D ends a file.
 
-## The cross toolchain
+## The ports
 
-`toolchain/` builds `x86_64-quark-gcc` and, with it, musl, libstdc++,
-coreutils, libwayland, the font stack, cairo, weston's clients, glib and GTK 4.
+`toolchain/` builds coreutils, libwayland, the font stack, cairo, weston's
+clients, glib and GTK 4 for Quark, with the cross compilers
+[quark-toolchain](https://github.com/MagicJester2764/quark-toolchain) makes.
 One script per port, each saying what it needed; `toolchain/README.md` is the
 account of all of it.
 

@@ -12,7 +12,8 @@
 # Everything lands under $QUARK_SRC (default ~/opt/src), which survives a
 # reboot, rather than under /tmp, which does not.
 #
-# What this does not do: install the cross compiler or musl. See build-musl.sh.
+# What this does not do: install the cross compiler or musl. Those are
+# quark-toolchain's, a repository beside this one.
 set -e
 
 SRC=${QUARK_SRC:-$HOME/opt/src}

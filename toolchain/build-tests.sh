@@ -1,13 +1,17 @@
 #!/bin/sh
-# Build the C library's own tests: small programs that check a piece of the
-# platform a ported library leans on, rather than any one library.
+# Build the ports' tests: one small program per library, doing the thing the
+# library is for on the system it was ported to.
 #
 #     ./build-tests.sh [outdir]
 #
-# They exist because every port so far has found a lie in the C library that
-# nothing else had noticed — fcntl answering 0 to everything, close doing
-# nothing, thread-locals landing outside their block — and each was only
-# caught because a real program tripped it. A test per lie keeps it caught.
+# A port that compiles has said nothing yet. zlib has to inflate what it
+# deflated, cairo has to draw, pango has to lay out a line — on Quark, through
+# Quark's C library. These are what say so, and the lists beside them
+# (`cairo.tests`, `toolkit.tests`, ...) are what `runtests` reads.
+#
+# The C library's own tests are not here: they are quarkutils'
+# (`tools/build-ctests.sh` there), and a suite directory built from each goes
+# into an image side by side.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${1:-$PWD/tests-out}

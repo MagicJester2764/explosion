@@ -1,0 +1,6 @@
+# The libraries a toolkit stands on, each doing the thing it is for.
+# Expected: all passed.
+gsync
+glibtest
+hbtest
+pangotest

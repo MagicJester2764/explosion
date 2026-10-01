@@ -2,22 +2,21 @@
 
 ExplOSion is where Quark is assembled into something that boots, and where
 other people's software is built for it. It is one of six repositories that
-must be checked out as siblings:
+are checked out as siblings:
 
 ```
 repos/
   quark/       the kernel
   quarkutils/  everything that runs on it
   bang/        the UEFI bootloader
-  explosion/   this repo — staging, images, QEMU targets, the cross toolchain
-  gnu-quark/   the other distro: GNU's bash and coreutils on the same kernel.
-               It needs the cross toolchain built here on PATH, and nothing
-               else from this tree
+  quark-toolchain/  the cross compilers every C program here is built with
+  explosion/   this repo — staging, images, QEMU targets, and the ports
   rust/        fork of rust-lang/rust with the x86_64-unknown-quark std PAL
 ```
 
-The dependency runs one way: this tree reaches down to the other three, and
-none of them knows it exists. Rules about the kernel are in
+The dependency runs one way: this tree reaches down to the kernel, the
+userland and the bootloader, and uses the compilers; none of them knows it
+exists. Rules about the kernel are in
 `../quark/CLAUDE.md`; rules about programs, the screen, files and the toolkits
 are in `../quarkutils/CLAUDE.md`. Read those before changing what an image
 *does*; this file is about how one is made and checked.
@@ -102,8 +101,9 @@ if an `expect` gave up or the kernel faulted.
   agent's tool call can be blocked.
 
 What to run on the machine: `dtest` (the kernel, through its ABI),
-`runtests /etc/libc.tests` and the other lists in `/etc`, `qfuzz <rounds>
-<seed>`. After anything that writes to the disk, `check-rootfs.sh` — on ext2
+`runtests /etc/libc.tests` (the C library's tests, which are quarkutils':
+`tools/build-ctests.sh` there builds the suite directory) and the ports' lists
+in `/etc`, `qfuzz <rounds> <seed>`. After anything that writes to the disk, `check-rootfs.sh` — on ext2
 *and* ext4, since they share less code than it looks.
 
 ## The toolchain
@@ -125,9 +125,10 @@ What to run on the machine: `dtest` (the kernel, through its ABI),
   A native glib's tools, `quark-fc-cache` and gperf live in `$QUARK_HOSTDEPS`
   (`~/opt/src/host-deps`); the wayland scanner is in `host-tools/` here. A
   cross-built copy of a build tool is a Quark program and cannot run here.
-- **The musl specs name three paths inside `../quarkutils` absolutely.** If
-  that checkout moves, run `toolchain/musl-wrappers.sh`; musl itself does not
-  need rebuilding.
+- **The compiler is not built here.** `x86_64-quark-musl-gcc` and `-g++`
+  come from `../quark-toolchain`, on `PATH`. Its musl specs name three paths
+  inside `../quarkutils` absolutely; if that checkout moves, its
+  `musl-wrappers.sh` writes them again.
 - **A C program is linked against whatever `liblinux-abi.a` is at that path
   now.** After changing the layer, relink the programs that should see it:
   nothing tracks that dependency for a program built outside quarkutils.

@@ -1,21 +1,23 @@
-# The x86_64-quark cross toolchain
+# Other people's software, built for Quark
 
-`build.sh` turns a binutils and a gcc source tree into a compiler that targets
-Quark, installed under `~/opt/cross` by default. Everything else here is a
-port built with it: one script per library, each saying at its top what it
-takes and what it needed.
+Every port ExplOSion carries: one script per library or program, each saying
+at its top what it takes and what it needed.
+
+They are built with the cross compilers
+[quark-toolchain](https://github.com/MagicJester2764/quark-toolchain) makes —
+`x86_64-quark-musl-gcc` and `-g++`, on `PATH` — and nothing here builds a
+compiler. The directory is called `toolchain/` because it once did.
 
 In the order they need each other:
 
 | | Scripts | Gives |
 |---|---|---|
-| The compiler | `build.sh`, then `build-musl.sh`, then `build-libstdcxx.sh` | `x86_64-quark-gcc`, and `x86_64-quark-musl-gcc` and `-g++` for everything below |
 | coreutils | `build-coreutils.sh` | 102 programs |
 | Wayland | `bootstrap-wayland.sh`, which runs `build-libffi.sh` and `build-wayland.sh` | libwayland, and a scanner that runs here |
 | The font stack | `bootstrap-fonts.sh`, then `build-zlib.sh`, `-freetype`, `-expat`, `-fontconfig`, `-pixman`, `-libpng`, `-cairo`, `-xkbcommon`, `stage-fonts.sh` | text on a surface |
 | Weston's clients | `build-weston-client.sh`, `build-weston-toytoolkit.sh` | `weston-simple-shm`, `weston-terminal` |
 | The toolkit | `bootstrap-toolkit.sh`, then `build-pcre2.sh`, `-glib`, `-harfbuzz`, `-fribidi`, `-pango`, `-graphene`, `-libjpeg`, `-libtiff`, `-gdk-pixbuf`, `-epoxy`, `install-egl-headers.sh`, `build-wayland-protocols.sh`, `build-gtk.sh`, `build-gtk-client.sh`, `stage-xkb.sh` | GTK 4, and `hello-world` |
-| Tests | `build-tests.sh` | the C library's suite, as a `TEST_SUITES` directory |
+| Tests | `build-tests.sh` | the ports' own tests, as a `TEST_SUITES` directory |
 
 Sources live under `$QUARK_SRC` (`~/opt/src`), the compiler under `~/opt/cross`,
 and what a build needs to *run on this machine* — a native glib's tools, a
@@ -28,116 +30,6 @@ the word `quark` (`teach-config-sub.sh`) is not a patch to the package; it is
 a patch to autoconf's idea of what operating systems exist. One port predates
 the rule and still carries a patch, small and described below: fontconfig
 (one line). coreutils carried one too, and no longer does.
-
-## Why a target and not a pile of flags
-
-Quark is x86-64 and so is every machine this has been built on, so
-`-ffreestanding -nostdlib` plus our own headers already produced working
-binaries — that is how quarkutils' `libc` and the programs against it were built
-before this existed.
-
-What a target triple buys is that the compiler knows the answers itself. A
-Quark program loads above 512 GiB, is not relocated, runs with no red zone,
-links against a C library called `libc.a`, starts at a `crt0.o` that builds
-argv out of a page the spawner maps, and is laid out by a script that belongs
-to the system rather than to any one program. Those are properties of the
-platform. A build system that was not written for Quark has no way to be told
-them, and `./configure` will not accept them from somebody who already knows —
-it runs the compiler and believes what happens.
-
-So the difference is not what can be built but what can be *ported*.
-
-## What was changed
-
-Small and in the usual places, the same shape as any other OS target:
-
-- **binutils** — `config.sub` accepts `quark` as an operating system;
-  `bfd/config.bfd`, `gas/configure.tgt` and `ld/configure.tgt` map
-  `x86_64-*-quark*` onto the ordinary x86-64 ELF vectors. Nothing about the
-  object format is unusual, so nothing about it is new.
-- **gcc** — the same `config.sub` line, a target in `gcc/config.gcc` built like
-  the bare `x86_64-*-elf*` one plus `gcc/config/quark.h`, and the target added
-  to `libgcc/config.host`.
-- **`gcc/config/quark.h`** — the whole port, and it is short: the default code
-  model, red zone and PIC settings; `crt0.o`; `-lc`; the link script by
-  absolute path through the sysroot; and `__quark__`.
-- **libgcc is built without coverage.** `libgcov` calls `fork` and `exec`,
-  and when this was configured Quark had neither. It has both now; coverage
-  stays off because nothing has asked for it, and turning it on is one
-  `--enable-gcov` and a rebuild.
-
-## The sysroot
-
-`make -C ../../quarkutils/libc install-sysroot` puts the headers, `libc.a`,
-`crt0.o` and the link script where the toolchain looks. It has to run *before*
-`build.sh`, because gcc compiles its own support library against those headers.
-
-Two gaps in the C library were found by exactly that, and both were real rather
-than gcc being fussy: there was no `sys/types.h` and no `time.h`, and `stdio.h`
-had no `FILE` — `fprintf` took a descriptor. A library that cannot say
-`fprintf(stderr, ...)` is not one anybody can port to.
-
-## C++
-
-`build.sh` builds `c,c++`, which gives `x86_64-quark-g++` and `cc1plus`;
-`build-libstdcxx.sh` builds the standard library afterwards, against musl. The
-two are separate because gcc's in-tree libstdc++ would be built against the
-sysroot's C library — the hand-written `libc` in quarkutils, enough for libgcc and
-no more — and libstdc++ wants `wchar.h`, a locale and threads. libstdc++-v3
-configures on its own, so it is built like any other port: with the musl
-wrapper, for the musl prefix.
-
-The port needed three lines, in the usual places:
-
-- **`libstdc++-v3/crossconfig.m4`** (and the generated `configure`) list the
-  hosts libstdc++ knows how to be cross-built for, and an unknown one is
-  "No support for this host/target combination". `*-quark*` joins the Linux
-  arm, which is the truthful one: the C library underneath is musl.
-- **`libgcc/config.host`** builds `crtbegin.o` and `crtend.o` for quark. They
-  are not about constructors here — `--enable-initfini-array` puts those in
-  `.init_array` — but about `.eh_frame`: crtbegin contributes the empty frame
-  table the unwinder is handed and the constructor that registers it, crtend
-  the zero word that ends it.
-- **Quark's user link script** used to discard `.eh_frame`, which was free
-  while nothing unwound. The first C++ `throw` walked a table that was not
-  there and took a page fault instead of finding its handler.
-
-`tests/cxxtest.cpp` is the check: a constructor before `main`, the containers,
-a virtual call, a `dynamic_cast`, and an exception thrown through twenty frames
-and caught by type with a destructor run on the way out.
-
-## musl
-
-`build-musl.sh` builds musl against the same target. It runs: a musl program
-prints, allocates, reads its arguments and exits on Quark.
-
-The patch is four files, which is the point — musl's system call interface is
-that narrow. `syscall_arch.h` calls a translation layer instead of issuing the
-`syscall` instruction, because Quark's numbers mean different things; two
-assembly files that issue `syscall` themselves are pointed at the same layer;
-and `crt_arch.h` builds the argc/argv/environment/auxv block musl expects to
-find on its stack out of the page Quark's spawner maps instead.
-
-The layer itself is `quarkutils/linux-abi`. It is mostly an IPC client wearing
-Linux's numbers: on a microkernel, `write` to a descriptor is a message to
-whatever is on the other end of it, and `open` is a message to the VFS. Where
-there is no equivalent it returns `-ENOSYS` rather than pretending — a libc
-told "no" copes, and one handed a lie fails somewhere unrelated and much later.
-
-`build-musl.sh` also writes a specs file and an `x86_64-quark-musl-gcc`
-wrapper, so musl is a choice the compiler knows how to make rather than a pile
-of flags every build system would have to be told. That is what makes the next
-part possible at all.
-
-The writing is `musl-wrappers.sh`, a script of its own, because the specs name
-three things inside the userland's checkout by absolute path: the C library's
-headers, `manifest.o` and `liblinux-abi.a`. Every musl program is linked
-against whatever is at those paths *now* — which is why the userland's `make`
-builds the layer even though nothing there links it — so when the checkout
-moves, the specs have to be written again and musl does not have to be built
-again. It has moved once: `quark/user/` became `quarkutils/`. Run
-`./musl-wrappers.sh`, with `QUARKUTILS_DIR` set if the userland is not the
-sibling `../../quarkutils`.
 
 ## coreutils
 
@@ -155,8 +47,7 @@ this one. It used to be patched with a branch for Quark. But the C library
 here is musl, and the file already knows musl's way — it keeps it under the
 heading of Linux, the only place it has met musl — so that one object is
 compiled being told it is on Linux (`coreutils-musl.mk`, read through
-`MAKEFILES`), and nothing else is. That is how
-[GNU/Quark](https://github.com/MagicJester2764/gnu-quark) builds it too.
+`MAKEFILES`), and nothing else is.
 
 Three things were needed on the Quark side, and each was a real gap rather
 than a workaround:
@@ -412,7 +303,6 @@ Quark, and `hello-world` is GTK's own `examples/hello/hello-world.c`: a window,
 a button, and "Hello World" on the console when it is clicked.
 
     ./toolchain/bootstrap-toolkit.sh
-    ./toolchain/build-libstdcxx.sh ~/opt/src/gcc
     ./toolchain/build-pcre2.sh    ~/opt/src/pcre2-10.44
     ./toolchain/build-glib.sh     ~/opt/src/glib-2.82.5
     ./toolchain/build-harfbuzz.sh ~/opt/src/harfbuzz-10.1.0
@@ -444,8 +334,9 @@ What is true of every one of them:
   The copies in the target prefix are Quark programs and cannot run here, so
   `build-glib.sh` also builds a native glib into `$QUARK_HOSTDEPS`, and every
   script after it puts that on `PATH` first.
-- **C++ is its own step.** harfbuzz is C++. `build.sh` builds `cc1plus`, and
-  `build-libstdcxx.sh` builds the library against musl afterwards.
+- **C++ has to be there first.** harfbuzz is C++, and wants the
+  `x86_64-quark-musl-g++` and the libstdc++ that quark-toolchain builds as a
+  step of its own.
 
 What each needed:
 
@@ -454,7 +345,8 @@ What each needed:
   a `poll` with no descriptors that waits. Its main loop wakes itself by
   writing to an eventfd and drains it "until it is empty"; with a read that
   waited instead of answering `EAGAIN`, the loop stopped holding its own lock.
-  `tests/gsync.c` and `tests/polltest.c` are those four as tests.
+  `tests/gsync.c`, and `polltest` among the C library's own tests in
+  quarkutils, are those four as tests.
 - **harfbuzz** and **pango** needed nothing but the above, and a program
   bigger than four megabytes to be loadable: a spawner reads the whole image
   before it gives the pages away, and its limit was 4 MiB. It is 32.
@@ -504,11 +396,16 @@ so a program that never exits costs its deadline and not the run. Failures are
 said as they happen and again at the end, with the arguments that caused them,
 because a list of five hundred lines scrolls the first ones off the screen.
 
-Each port's suite is a list of its own: `libc.tests` (the C library's own
-tests, one per lie a port has caught it telling), `zlib.tests`,
-`pixman.tests`, `fontconfig.tests`, `fonts.tests`, `cairo.tests`, `xml.tests`,
-`xkb.tests`. `selftest.tests` is runtests testing itself: four lines that pass
-and three that must fail.
+Each port's suite is a list of its own: `zlib.tests`, `pixman.tests`,
+`fontconfig.tests`, `fonts.tests`, `cairo.tests`, `xml.tests`, `xkb.tests`,
+and `toolkit.tests` for glib, harfbuzz and pango. `build-tests.sh` builds the
+programs they name.
+
+Three more lists come from quarkutils, with the programs they name
+(`tools/build-ctests.sh` there): `libc.tests`, the C library's own tests, one
+per lie a ported program has caught it telling; `selftest.tests`, which is
+runtests testing itself — four lines that pass and three that must fail; and
+`fuzz.tests`.
 
 **`fuzz.tests` and `qfuzz`.** `qfuzz ROUNDS [SEED]` (in `quarkutils/qfuzz`)
 sends every registered service requests built from a seed — tags from its own

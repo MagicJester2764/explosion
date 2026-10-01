@@ -7,7 +7,7 @@
 # not a table lookup: ligatures, kerning, marks and the scripts that join are
 # all here. pango needs it, so GTK needs it, and so would Qt.
 #
-# harfbuzz is C++, which is the whole reason build-libstdcxx.sh exists. It is
+# harfbuzz is C++, which is the whole reason quark-toolchain builds a libstdc++. It is
 # built without exceptions or RTTI, which is what harfbuzz asks for itself.
 #
 # ICU is off: it is a second, larger, copy of the Unicode tables, and

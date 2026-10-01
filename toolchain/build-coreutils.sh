@@ -3,7 +3,7 @@
 #
 #     ./build-coreutils.sh /path/to/coreutils-9.11
 #
-# Needs x86_64-quark-musl-gcc on PATH, which build-musl.sh installs.
+# Needs x86_64-quark-musl-gcc on PATH, which quark-toolchain installs.
 #
 # This is the thing a cross toolchain exists for. Nothing here tells the
 # compiler where a Quark program loads or what its C library is called;

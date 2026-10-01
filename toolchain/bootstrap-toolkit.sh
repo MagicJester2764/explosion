@@ -49,7 +49,7 @@ fetch https://download.gnome.org/sources/glib/2.82/glib-2.82.5.tar.xz \
     glib-2.82.5.tar.xz \
     05c2031f9bdf6b5aba7a06ca84f0b4aced28b19bf1b50c6ab25cc675277cbc3f \
     glib-2.82.5
-# harfbuzz is C++, which is what build-libstdcxx.sh is for.
+# harfbuzz is C++, which is what quark-toolchain's build-libstdcxx.sh is for.
 fetch https://github.com/harfbuzz/harfbuzz/releases/download/10.1.0/harfbuzz-10.1.0.tar.xz \
     harfbuzz-10.1.0.tar.xz \
     6ce3520f2d089a33cef0fc48321334b8e0b72141f6a763719aaaecd2779ecb82 \

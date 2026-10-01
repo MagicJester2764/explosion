@@ -3,7 +3,7 @@
 #
 #     ./build-wayland.sh /path/to/wayland-1.23.1
 #
-# Needs x86_64-quark-musl-gcc on PATH (build-musl.sh), meson and ninja, and a
+# Needs x86_64-quark-musl-gcc on PATH (quark-toolchain's), meson and ninja, and a
 # host expat for wayland-scanner. HOSTPREFIX is where the host-side tools go.
 #
 # A distribution's `expat` package is the shared library only; the scanner needs
