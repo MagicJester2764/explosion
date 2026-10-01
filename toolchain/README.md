@@ -17,6 +17,7 @@ In the order they need each other:
 | The font stack | `bootstrap-fonts.sh`, then `build-zlib.sh`, `-freetype`, `-expat`, `-fontconfig`, `-pixman`, `-libpng`, `-cairo`, `-xkbcommon`, `stage-fonts.sh` | text on a surface |
 | Weston's clients | `build-weston-client.sh`, `build-weston-toytoolkit.sh` | `weston-simple-shm`, `weston-terminal` |
 | The toolkit | `bootstrap-toolkit.sh`, then `build-pcre2.sh`, `-glib`, `-harfbuzz`, `-fribidi`, `-pango`, `-graphene`, `-libjpeg`, `-libtiff`, `-gdk-pixbuf`, `-epoxy`, `install-egl-headers.sh`, `build-wayland-protocols.sh`, `build-gtk.sh`, `build-gtk-client.sh`, `stage-xkb.sh` | GTK 4, and `hello-world` |
+| The console's font | `stage-unifont.sh` | GNU Unifont, as an overlay: what the console draws past ASCII |
 | Tests | `build-tests.sh` | the ports' own tests, as a `TEST_SUITES` directory |
 
 Sources live under `$QUARK_SRC` (`~/opt/src`), the compiler under `~/opt/cross`,

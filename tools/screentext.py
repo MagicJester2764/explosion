@@ -3,12 +3,20 @@
 
     tools/screentext.py <shot.ppm> [font.rs]
 
-The console draws an 8x16 bitmap font on a grid, so a screendump of it *is*
-its text, exactly: each cell is matched against the font it was drawn with
-(`quark-rt/src/font.rs` in the userland, or `QUARK_FONT`). A cell is decided
-by which of its pixels differ from its most common colour, so neither the
-colour a program printed in nor a background behind it matters. A cell that
-matches nothing — part of a window, a picture — is `?`.
+The console draws a bitmap font on a grid, so a screendump of it *is* its
+text, exactly: each cell is matched against the fonts it may have been drawn
+with. One is built into the console (`quark-rt/src/font.rs` in the userland,
+or `QUARK_FONT`), and is ASCII. The other is whatever `setfont` loaded, in
+GNU Unifont's `.hex` format: name the file, or several with the path
+separator between them, in `QUARK_FONT_HEX`, and a screen drawn in it is read
+too — including the characters that are two cells wide.
+
+A cell is decided by which of its pixels differ from its most common colour,
+so neither the colour a program printed in nor a background behind it
+matters. A cell that matches nothing — part of a window, a picture, a
+character no font here has — is `?`. Where two characters have the same
+shape, as a Latin A and a Greek one do, it is read as the one that comes
+first.
 
 It is what lets a test wait for a prompt rather than for a number of seconds,
 and what turns "look at the screenshot" into something `grep` can do.
@@ -25,15 +33,37 @@ FONT = os.environ.get(
 GLYPH_W, GLYPH_H = 8, 16
 
 
-def load_font(path=FONT):
-    """Glyph bitmaps to the character each is, from the Rust table."""
+class Font:
+    """Glyph bitmaps to the character each is: one cell wide, and two."""
+
+    def __init__(self):
+        self.narrow = {}
+        self.wide = {}
+
+    def add(self, rows, char):
+        # The first character to claim a shape keeps it, so blank is a space.
+        (self.wide if len(rows) == 2 * GLYPH_H else self.narrow).setdefault(rows, char)
+
+
+def load_font(path=FONT, hex_paths=None):
+    """The fonts a screen may be drawn in: the console's own, from the Rust
+    table, and any `.hex` files named."""
+    font = Font()
     rows = re.findall(r"\[((?:0x[0-9A-Fa-f]{2},?){16})\]", open(path).read())
-    glyphs = {}
-    for code, row in enumerate(rows[:256]):
+    for code, row in enumerate(rows[:128]):
         key = tuple(int(b, 16) for b in row.split(",") if b)
-        # The first code to claim a shape keeps it, so blank is a space.
-        glyphs.setdefault(key, code)
-    return glyphs
+        font.add(key, " " if code in (0, 32) else chr(code) if 32 < code < 127 else "?")
+    if hex_paths is None:
+        hex_paths = [p for p in os.environ.get("QUARK_FONT_HEX", "").split(os.pathsep) if p]
+    for hex_path in hex_paths:
+        for line in open(hex_path):
+            name, _, bits = line.strip().partition(":")
+            if len(bits) not in (4 * GLYPH_H // 2, 4 * GLYPH_H):
+                continue
+            key = tuple(int(bits[i:i + 2], 16) for i in range(0, len(bits), 2))
+            code = int(name, 16)
+            font.add(key, " " if code in (0, 32) or not any(key) else chr(code))
+    return font
 
 
 def read_ppm(path):
@@ -45,11 +75,26 @@ def read_ppm(path):
 
 
 def lookup(glyphs, key):
-    code = glyphs.get(key)
-    if code is None:
+    char = glyphs.get(key)
+    if char is None:
         # More ink than ground: the same glyph in reverse video.
-        code = glyphs.get(tuple(b ^ 0xFF for b in key))
-    return code
+        char = glyphs.get(tuple(b ^ 0xFF for b in key))
+    return char
+
+
+def cell_key(px, w, row, col, across):
+    """The shape in a cell `across` pixels wide: one byte to eight pixels,
+    row by row."""
+    cell = []
+    for y in range(GLYPH_H):
+        at = ((row * GLYPH_H + y) * w + col * GLYPH_W) * 3
+        cell.append([px[at + x * 3:at + x * 3 + 3] for x in range(across)])
+    ground = Counter(p for line in cell for p in line).most_common(1)[0][0]
+    key = []
+    for line in cell:
+        for start in range(0, across, 8):
+            key.append(sum((p != ground) << (7 - x) for x, p in enumerate(line[start:start + 8])))
+    return tuple(key)
 
 
 # A row of text is sixteen rows of pixels, and most of a screen is the same
@@ -57,10 +102,11 @@ def lookup(glyphs, key):
 _ROWS = {}
 
 
-def screen_lines(path, glyphs):
+def screen_lines(path, font):
     """The screen as a list of lines, trailing blanks and blank lines gone."""
     w, h, px = read_ppm(path)
     lines = []
+    cols = w // GLYPH_W
     for row in range(h // GLYPH_H):
         raw = px[row * GLYPH_H * w * 3:(row + 1) * GLYPH_H * w * 3]
         known = _ROWS.get(raw)
@@ -68,24 +114,23 @@ def screen_lines(path, glyphs):
             lines.append(known)
             continue
         out = []
-        for col in range(w // GLYPH_W):
-            cell = []
-            for y in range(GLYPH_H):
-                at = ((row * GLYPH_H + y) * w + col * GLYPH_W) * 3
-                cell.append([px[at + x * 3:at + x * 3 + 3] for x in range(GLYPH_W)])
-            ground = Counter(p for line in cell for p in line).most_common(1)[0][0]
-            key = tuple(sum((p != ground) << (7 - x) for x, p in enumerate(line)) for line in cell)
-            code = lookup(glyphs, key)
-            if code is None and key[-2:] == (0xFF, 0xFF):
+        col = 0
+        while col < cols:
+            key = cell_key(px, w, row, col, GLYPH_W)
+            char = lookup(font.narrow, key)
+            if char is None and key[-2:] == (0xFF, 0xFF):
                 # The cursor is the bottom two rows of its cell, drawn over
                 # whatever is there.
-                code = lookup(glyphs, key[:-2] + (0, 0))
-            if code in (0, 32):
-                out.append(" ")
-            elif code is not None and 32 < code < 127:
-                out.append(chr(code))
-            else:
-                out.append("?")
+                char = lookup(font.narrow, key[:-2] + (0, 0))
+            if char is None and font.wide and col + 1 < cols:
+                # Not a character one cell wide. One two cells wide, perhaps.
+                char = lookup(font.wide, cell_key(px, w, row, col, 2 * GLYPH_W))
+                if char is not None:
+                    out.append(char)
+                    col += 2
+                    continue
+            out.append("?" if char is None else char)
+            col += 1
         text = "".join(out).rstrip()
         if len(_ROWS) > 2000:
             _ROWS.clear()

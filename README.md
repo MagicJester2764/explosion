@@ -104,6 +104,20 @@ overlay holding `etc/init.conf` with the one line `session /usr/bin/getty` has
 it start `getty`, which runs `login` on the console's pseudo-terminal — where
 `isatty` is true and Ctrl-D ends a file.
 
+And how the console gets a font. It is UTF-8, and was built with ASCII and
+nothing else: an accent or a line-drawing character is drawn out of a font
+it is given at boot. `toolchain/stage-unifont.sh` lays GNU Unifont out as an
+overlay, and a second line in `etc/init.conf` loads it before the session
+starts:
+
+```
+run /usr/bin/setfont /usr/share/consolefonts/unifont.hex
+session /usr/bin/getty
+```
+
+Without one the console draws the nearest ASCII to each character it has no
+picture of, and a box where there is none.
+
 ## The ports
 
 `toolchain/` builds coreutils, libwayland, the font stack, cairo, weston's

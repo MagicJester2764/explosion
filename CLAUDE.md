@@ -99,6 +99,10 @@ if an `expect` gave up or the kernel faulted.
   The script kills by pid.
 - **The timing is in the Python driver**, because a foreground `sleep` in an
   agent's tool call can be blocked.
+- **The screen is read by the font it was drawn in.** `screentext.py` knows
+  the console's built-in ASCII; an image that loads a font at boot is read
+  with `QUARK_FONT_HEX` naming that font's `.hex` file, or every character
+  on it is a `?`.
 
 What to run on the machine: `dtest` (the kernel, through its ABI),
 `runtests /etc/libc.tests` (the C library's tests, which are quarkutils':
