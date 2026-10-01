@@ -18,6 +18,7 @@ In the order they need each other:
 | Weston's clients | `build-weston-client.sh`, `build-weston-toytoolkit.sh` | `weston-simple-shm`, `weston-terminal` |
 | The toolkit | `bootstrap-toolkit.sh`, then `build-pcre2.sh`, `-glib`, `-harfbuzz`, `-fribidi`, `-pango`, `-graphene`, `-libjpeg`, `-libtiff`, `-gdk-pixbuf`, `-epoxy`, `install-egl-headers.sh`, `build-wayland-protocols.sh`, `build-gtk.sh`, `build-gtk-client.sh`, `stage-xkb.sh` | GTK 4, and `hello-world` |
 | The console's font | `stage-unifont.sh` | GNU Unifont, as an overlay: what the console draws past ASCII |
+| Filesystems | `build-e2fsprogs.sh`, `build-dosfstools.sh` | `mkfs.ext4`, `mkfs.ext2`, `e2fsck`, `mkfs.fat`, `fsck.fat`, in `../fstools` |
 | Tests | `build-tests.sh` | the ports' own tests, as a `TEST_SUITES` directory |
 
 Sources live under `$QUARK_SRC` (`~/opt/src`), the compiler under `~/opt/cross`,
@@ -86,6 +87,41 @@ asks for when sizing its buffer and copes without. `EXTRA_CFLAGS=-DQUARK_ABI_TRA
 on the layer makes every unimplemented call name itself on stderr, which is how
 each of the above was found — an ENOSYS otherwise reaches the program as a bare
 errno and gets reported as whatever it was doing at the time.
+
+## e2fsprogs and dosfstools
+
+`build-e2fsprogs.sh` builds e2fsprogs 1.47.3 and `build-dosfstools.sh`
+dosfstools 4.2, and what they leave in `../fstools` is tracked: `mke2fs`
+(which is also `mkfs.ext2` and `mkfs.ext4`, and makes what its name says),
+`e2fsck`, `mkfs.fat` and `fsck.fat`. They are what an installer formats a
+disk with, and they are in every image.
+
+Neither is patched, and neither needed anything of the C library that was
+not there. They ran the first time they were started: a GPT made by `parts`,
+a FAT32 filesystem on its first partition and an ext4 one on its second, and
+the host's `sfdisk`, `fsck.fat` and `e2fsck` found nothing to say about any
+of the three. What they did need was under them:
+
+- **A disk as a file** (`/dev/disk0p2`, in `../quarkutils`), read and written
+  at any offset. Both find how long a disk is the slow way here — reading at
+  an offset to see whether anything is there, and halving — because the
+  question each would rather ask (`BLKGETSIZE64`) is behind `#ifdef
+  __linux__` in their sources. Quark answers it; they do not ask.
+- **`-rdynamic`, in the compiler.** e2fsprogs links `e2fsck` with it without
+  asking whether the driver has it, and Quark's had not: an option the
+  driver takes is declared by the target. quark-toolchain declares it now.
+  It asks for symbols to go in a table a static program has not got, so the
+  programs are byte for byte what they were without it.
+- **A `config.sub` from 2018.** dosfstools' writes every system's name with
+  the dash that follows the machine, which `teach-config-sub.sh` had not
+  seen; it is the fourth shape that file has had.
+
+A filesystem that is mounted is its file server's, and so cannot be opened
+to write: `mke2fs -F` on the disk the system is running from gets "Resource
+busy", which `mkfstest` checks along with the rest (`fstools.tests`).
+
+e2fsprogs' two print one complaint until mounts are written down where they
+look: "Can't check if filesystem is mounted due to missing mtab file".
 
 ## Putting them in an image
 

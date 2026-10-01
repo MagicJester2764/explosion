@@ -1,0 +1,4 @@
+# The filesystem tools (e2fsprogs and dosfstools): each makes its filesystem
+# on a disk of memory and the checker of its kind passes it. Expected: all
+# passed.
+@600 mkfstest

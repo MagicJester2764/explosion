@@ -102,6 +102,12 @@ its files back out. Programs are stripped on the way in, which needs
 `x86_64-quark-strip` on `PATH`; without it they go in unstripped and the root
 fills up.
 
+One port is in every image, and its programs are tracked here: `fstools/`
+holds `mkfs.ext4`, `mkfs.ext2`, `mkfs.fat` and the two checkers, `e2fsck` and
+`fsck.fat` — e2fsprogs and dosfstools, unpatched. A system that cannot make a
+filesystem cannot install itself, and assembling the image that does should
+not need a cross compiler. `FSTOOLS=` leaves them out.
+
 After the overlays, staging builds fontconfig's caches for whatever fonts are
 there (`tools/stage-font-caches.sh`), and writes `/etc/hostile.tests`: every
 staged program with sixteen sets of arguments nobody would give it on purpose.
@@ -129,7 +135,8 @@ picture of, and a box where there is none.
 ## The ports
 
 `toolchain/` builds coreutils, libwayland, the font stack, cairo, weston's
-clients, glib and GTK 4 for Quark, with the cross compilers
+clients, glib, GTK 4, e2fsprogs and dosfstools for Quark, with the cross
+compilers
 [quark-toolchain](https://github.com/MagicJester2764/quark-toolchain) makes.
 One script per port, each saying what it needed; `toolchain/README.md` is the
 account of all of it.

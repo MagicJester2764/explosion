@@ -67,6 +67,13 @@ TEST_SUITES     ?=
 # all, and a later stage without it takes its files back out.
 ROOT_OVERLAYS   ?=
 
+# The programs that make and check filesystems — mkfs.ext4, mkfs.fat and
+# their checkers — as `toolchain/build-e2fsprogs.sh` and
+# `build-dosfstools.sh` leave them. On by default and tracked, unlike the
+# ports above: a system that cannot make a filesystem cannot install itself,
+# and assembling the image that does should not need a cross compiler.
+FSTOOLS         ?= fstools
+
 .PHONY: all stage hd hd-ext4 hd-fat32 iso run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
@@ -134,7 +141,7 @@ stage: FORCE
 		echo "tests: staged $$n programs from $$d"; \
 	done
 	@# Runs either way, like stage-coreutils.sh, so unsetting it un-stages.
-	@./tools/stage-overlays.sh $(STAGE) $(ROOT_OVERLAYS)
+	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
 	@# Last, since it lists every program the stage now has.
