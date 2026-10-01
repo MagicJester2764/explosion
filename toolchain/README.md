@@ -25,10 +25,9 @@ None of it is in `/tmp`, which a reboot empties.
 **The rule every port follows: nothing patches an upstream program or library.**
 If a port needs something, Quark grows it. Teaching a package's `config.sub`
 the word `quark` (`teach-config-sub.sh`) is not a patch to the package; it is
-a patch to autoconf's idea of what operating systems exist. Two ports predate
-the rule and carry a patch each, both small and both described below:
-coreutils (a gnulib file whose `#error` asks to be ported) and fontconfig (one
-line).
+a patch to autoconf's idea of what operating systems exist. One port predates
+the rule and still carries a patch, small and described below: fontconfig
+(one line). coreutils carried one too, and no longer does.
 
 ## Why a target and not a pile of flags
 
@@ -147,11 +146,17 @@ sibling `../../quarkutils`.
 program that was the previous high-water mark for this phase, and pipelines
 work — `seq 1 12 | wc -l` says 12.
 
-The patch is two hunks. One teaches coreutils' own `config.sub` that quark is
-an operating system, which every autoconf package will need. The other adds a
-branch to a gnulib file whose `#error` asks, in as many words, to be ported:
-Quark has one locale and it is "C", so that is what it says. Everything else
-about coreutils built unmodified.
+Nothing in it is patched. Its `config.sub` is taught that quark is an
+operating system, as every autoconf package's is. And one file of gnulib,
+`getlocalename_l-unsafe.c`, stops with an `#error` that asks, in as many
+words, to be ported: it has to reach into the C library for the name of a
+locale, asks which library by asking which system, and has never heard of
+this one. It used to be patched with a branch for Quark. But the C library
+here is musl, and the file already knows musl's way — it keeps it under the
+heading of Linux, the only place it has met musl — so that one object is
+compiled being told it is on Linux (`coreutils-musl.mk`, read through
+`MAKEFILES`), and nothing else is. That is how
+[GNU/Quark](https://github.com/MagicJester2764/gnu-quark) builds it too.
 
 Three things were needed on the Quark side, and each was a real gap rather
 than a workaround:

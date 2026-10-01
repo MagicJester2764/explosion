@@ -110,8 +110,8 @@ What to run on the machine: `dtest` (the kernel, through its ABI),
 - **Nothing patches an upstream program or library.** If a port needs
   something, Quark grows it. `teach-config-sub.sh` is the one exception in
   kind, and it patches autoconf's list of operating systems rather than the
-  package. coreutils and fontconfig carry one small patch each from before the
-  rule.
+  package. fontconfig carries one small patch from before the rule;
+  coreutils did, and is built without it now (`coreutils-musl.mk`).
 - **Static, and not PIC.** There is no dynamic loader. meson builds take
   `meson-cross-quark.ini`, cmake takes `cmake-cross-quark.cmake`, and the
   compiler wrapper drops `-fPIC` and `-pthread` whatever a build asks for.
