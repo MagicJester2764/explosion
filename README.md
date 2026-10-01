@@ -15,6 +15,12 @@ The dependency runs one way. ExplOSion reaches down to the three trees beside
 it; none of them knows it exists, and none of them knows what an image looks
 like.
 
+There is a second distribution of Quark,
+[GNU/Quark](https://github.com/MagicJester2764/gnu-quark): the same kernel
+under GNU's bash and coreutils, with a fixed list of what is in it. It builds
+its packages with the cross toolchain made here (`toolchain/`), and tests
+itself with a copy of this tree's driver.
+
 ## Build and run
 
 ```bash

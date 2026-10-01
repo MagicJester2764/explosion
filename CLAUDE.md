@@ -1,7 +1,7 @@
 # Working on ExplOSion
 
 ExplOSion is where Quark is assembled into something that boots, and where
-other people's software is built for it. It is one of five repositories that
+other people's software is built for it. It is one of six repositories that
 must be checked out as siblings:
 
 ```
@@ -10,6 +10,9 @@ repos/
   quarkutils/  everything that runs on it
   bang/        the UEFI bootloader
   explosion/   this repo — staging, images, QEMU targets, the cross toolchain
+  gnu-quark/   the other distro: GNU's bash and coreutils on the same kernel.
+               It needs the cross toolchain built here on PATH, and nothing
+               else from this tree
   rust/        fork of rust-lang/rust with the x86_64-unknown-quark std PAL
 ```
 
