@@ -17,7 +17,8 @@ VERSION = 1
 HDR = 24
 REQ = 24
 
-# Mirrors CAP_TYPE_* in quark-rt.
+# Mirrors CAP_TYPE_* in quark-rt. 7 was a set of task ids and was withdrawn;
+# an endpoint is 8.
 TYPES = {
     1: "ioport",
     2: "phys_range",
@@ -25,11 +26,20 @@ TYPES = {
     4: "task_mgmt",
     5: "phys_alloc",
     6: "set_uid",
-    7: "endpoint",
+    8: "endpoint",
+    9: "memobject",
 }
+
+# Not a capability: a request to be scheduled in a band (PRIORITY_REQ in
+# quark-rt's manifest module). A spawner applies it under the same narrowing
+# rule, so it can give no better a band than it is in itself.
+PRIORITY_REQ = 0x100
+BANDS = {0: "driver", 1: "server", 2: "normal", 3: "idle"}
 
 
 def describe(cap_type, p0, p1):
+    if cap_type == PRIORITY_REQ:
+        return f"band {BANDS.get(p0, p0)}"
     name = TYPES.get(cap_type, f"type{cap_type}")
     if name == "ioport":
         return f"ioport 0x{p0:X}-0x{p1:X}"

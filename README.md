@@ -1,13 +1,19 @@
 # ExplOSion
 
-A Quark meta-distro. This is where the system is assembled and run.
+A Quark meta-distro. This is where the system is assembled and run, and where
+other people's software is built for it.
 
 ```
 ../quark        the microkernel
 ../quarkutils   the programs that run on it
 ../bang         the UEFI bootloader
-./              this: staging, image assembly, QEMU targets
+./              this: staging, image assembly, QEMU targets, the cross
+                toolchain and every port built with it
 ```
+
+The dependency runs one way. ExplOSion reaches down to the three trees beside
+it; none of them knows it exists, and none of them knows what an image looks
+like.
 
 ## Build and run
 
@@ -17,13 +23,25 @@ make hd      # assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 make run     # boot it in QEMU
 ```
 
-`make hd` builds an ext2 root; `make hd-fat32` and `make run-fat32` use FAT32
-instead. `make cd` and `make run-iso` produce a bootable ISO.
+The root is ext2 unless asked otherwise: `make hd-ext4` and `make run-ext4`
+give it ext4 with a journal, `make hd-fat32` and `make run-fat32` FAT32.
+`make cd` and `make run-iso` produce an ISO that boots the EFI partition; it
+carries no root filesystem, so it gets as far as the services in `boot.img`.
 
 `make clean` removes the staging directory and the images. `make distclean`
 also cleans the trees next door.
 
-## Layout
+It needs, besides what the three trees need to build: `mtools`, `mkgpt`,
+`e2fsprogs` (`mkfs.ext2`, `mkfs.ext4`, `debugfs`), `xorriso` for the ISO, and
+`qemu-system-x86_64`. The firmware is Bang's copy of OVMF; set `OVMF_PATH` to
+use another.
+
+QEMU is started with `-cpu max`, deliberately: the default CPU models expose
+neither SMEP nor SMAP, so without it the kernel's supervisor-mode protections
+are silently off and a boot proves nothing about them. It gets a gigabyte of
+memory, and KVM when the machine has it.
+
+## What goes in an image
 
 `make stage` collects into `stage/`:
 
@@ -36,16 +54,77 @@ stage/usr/share/doc/quark/abi.md  and what they mean                (quark)
 stage/boot/           essential services, packed into boot.img      (quarkutils)
 stage/usr/bin/        everything else, packed into the root         (quarkutils)
 stage/etc/            passwd                                        (quarkutils)
+stage/bin/sh          the shell, where a program looks for one      (here)
 stage/BOOTX64.EFI     Bang itself, installed to the ESP             (bang)
 ```
 
 The kernel and the userland each produce their share through
-`make install DESTDIR=…`, so nothing here reaches into a source tree, and
-nothing there knows an image exists. The kernel goes first: the userland checks
-its own copy of the system call numbers against the header the kernel has just
-installed, and here — where both are present — a missing header is an error
-rather than a skipped check. That stage directory is the only place the two
-repositories meet.
+`make install DESTDIR=…`, so nothing here reaches into a source tree. The
+kernel goes first: the userland checks its own copy of the system call numbers
+against the header the kernel has just installed, and here — where both are
+present — a missing header is an error rather than a skipped check. That stage
+directory is the only place the two repositories meet.
+
+The image is two partitions. The first is the EFI system partition: Bang, the
+kernel, `bang.cfg`, and `drivers/` — the kernel's two modules, `init.elf`, and
+`boot.img`, a small FAT image of the services `init` starts before there is a
+root filesystem to read. The second is the root.
+
+`bang.cfg` is written to match what is actually in the image. It always offers
+Quark; a UEFI shell is added if this machine has one (`SHELL_EFI`), and a Linux
+kernel if `LINUX_KERNEL` names a bzImage — both there to show that Bang can
+boot something that is not Quark.
+
+### Other people's software
+
+Everything above builds from the three checkouts. What is built with the cross
+toolchain is an *install* rather than a checkout, so the image takes it from
+wherever it was built, by variable, and leaves it out by default:
+
+| Variable | What it stages |
+|---|---|
+| `COREUTILS=<build>/src` | GNU coreutils, into `/usr/bin`. Quark's own `ls`, `cat` and `echo` keep their names. |
+| `WAYLAND_CLIENTS=<dir>` | Every executable in the directory into `/usr/bin`, and its `share/` into `/usr/share`. `clients/` here is one: weston's clients, the small test clients, and GTK's `hello-world`. |
+| `TEST_SUITES="<dir> …"` | Each directory's programs into `/usr/bin` and its `*.tests` lists into `/etc`, for `runtests`. |
+| `ROOT_OVERLAYS="<dir> …"` | Trees laid out like the root — fonts, their configuration, keyboard data — copied over the stage as they are. |
+
+Each is recorded as it is staged, so building again without the variable takes
+its files back out. Programs are stripped on the way in, which needs
+`x86_64-quark-strip` on `PATH`; without it they go in unstripped and the root
+fills up.
+
+After the overlays, staging builds fontconfig's caches for whatever fonts are
+there (`tools/stage-font-caches.sh`), and writes `/etc/hostile.tests`: every
+staged program with sixteen sets of arguments nobody would give it on purpose.
+
+## The cross toolchain
+
+`toolchain/` builds `x86_64-quark-gcc` and, with it, musl, libstdc++,
+coreutils, libwayland, the font stack, cairo, weston's clients, glib and GTK 4.
+One script per port, each saying what it needed; `toolchain/README.md` is the
+account of all of it.
+
+## Testing
+
+Verification is a boot. A program's output goes to the framebuffer rather than
+to the serial line, so the result of a test is a screenshot.
+
+```bash
+tools/boot-test.sh keys.txt shot.ppm     # boot, type, take the picture
+tools/check-rootfs.sh hdimage.bin        # e2fsck the root the guest just wrote
+tools/crash-test.sh                      # stop the machine mid-write; recover
+```
+
+`boot-test.sh` drives QEMU over QMP from a script of operations — `type`,
+`key`, `sleep`, `move`, `press`, `shot`, `quit` — and serves an echo on the
+host for the network tests to reach. `IMG` and `RUNDIR` let an ext2 boot and an
+ext4 boot run side by side. `check-rootfs.sh` runs `e2fsck` from the host on
+the image a boot has just used, which is the check for any change to the file
+server: it has found what reading the code did not.
+
+On the machine itself, `dtest` checks the kernel through its ABI, `runtests
+/etc/<suite>.tests` runs a list of test programs, and `qfuzz` sends every
+service requests made from a seed.
 
 ## Packages
 
@@ -56,9 +135,9 @@ with metadata attached rather than a `cp` in a Makefile.
 
 ```bash
 cd stage
-../tools/qpkg build coreutils 0.1.0 usr/bin/CAT.ELF usr/bin/LS.ELF
-../tools/qpkg info coreutils-0.1.0.qpkg
-../tools/qpkg install coreutils-0.1.0.qpkg /path/to/root
+../tools/qpkg build drivers 0.1.0 boot/DISK.ELF boot/KEYBOARD.ELF
+../tools/qpkg info drivers-0.1.0.qpkg
+../tools/qpkg install drivers-0.1.0.qpkg /path/to/root
 ```
 
 `info` reads the capability manifest out of each binary, the same way the
@@ -67,8 +146,20 @@ inspectable before it is installed rather than discovered when it runs:
 
 ```
 capabilities requested:
-  usr/bin/CAT.ELF:
-    phys_alloc 64 pages
+  boot/DISK.ELF:
+    band driver
+    ioport 0x1F0-0x1F7
+    ioport 0x3F6-0x3F6
+    irq 14
+  boot/KEYBOARD.ELF:
+    band driver
+    ioport 0x60-0x64
+    irq 1
+    irq 12
 ```
 
 A program that requests nothing shows nothing, and gets nothing.
+
+## Disclaimer
+
+This is primarily an AI-assisted experimental project, not a production system. It was built as a vehicle for exploring OS development concepts with AI tooling. Use at your own risk.

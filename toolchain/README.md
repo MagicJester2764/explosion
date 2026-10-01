@@ -1,7 +1,34 @@
 # The x86_64-quark cross toolchain
 
 `build.sh` turns a binutils and a gcc source tree into a compiler that targets
-Quark, installed under `~/opt/cross` by default.
+Quark, installed under `~/opt/cross` by default. Everything else here is a
+port built with it: one script per library, each saying at its top what it
+takes and what it needed.
+
+In the order they need each other:
+
+| | Scripts | Gives |
+|---|---|---|
+| The compiler | `build.sh`, then `build-musl.sh`, then `build-libstdcxx.sh` | `x86_64-quark-gcc`, and `x86_64-quark-musl-gcc` and `-g++` for everything below |
+| coreutils | `build-coreutils.sh` | 102 programs |
+| Wayland | `bootstrap-wayland.sh`, which runs `build-libffi.sh` and `build-wayland.sh` | libwayland, and a scanner that runs here |
+| The font stack | `bootstrap-fonts.sh`, then `build-zlib.sh`, `-freetype`, `-expat`, `-fontconfig`, `-pixman`, `-libpng`, `-cairo`, `-xkbcommon`, `stage-fonts.sh` | text on a surface |
+| Weston's clients | `build-weston-client.sh`, `build-weston-toytoolkit.sh` | `weston-simple-shm`, `weston-terminal` |
+| The toolkit | `bootstrap-toolkit.sh`, then `build-pcre2.sh`, `-glib`, `-harfbuzz`, `-fribidi`, `-pango`, `-graphene`, `-libjpeg`, `-libtiff`, `-gdk-pixbuf`, `-epoxy`, `install-egl-headers.sh`, `build-wayland-protocols.sh`, `build-gtk.sh`, `build-gtk-client.sh`, `stage-xkb.sh` | GTK 4, and `hello-world` |
+| Tests | `build-tests.sh` | the C library's suite, as a `TEST_SUITES` directory |
+
+Sources live under `$QUARK_SRC` (`~/opt/src`), the compiler under `~/opt/cross`,
+and what a build needs to *run on this machine* — a native glib's tools, a
+native `fc-cache`, gperf — under `$QUARK_HOSTDEPS` (`~/opt/src/host-deps`).
+None of it is in `/tmp`, which a reboot empties.
+
+**The rule every port follows: nothing patches an upstream program or library.**
+If a port needs something, Quark grows it. Teaching a package's `config.sub`
+the word `quark` (`teach-config-sub.sh`) is not a patch to the package; it is
+a patch to autoconf's idea of what operating systems exist. Two ports predate
+the rule and carry a patch each, both small and both described below:
+coreutils (a gnulib file whose `#error` asks to be ported) and fontconfig (one
+line).
 
 ## Why a target and not a pile of flags
 
@@ -35,10 +62,10 @@ Small and in the usual places, the same shape as any other OS target:
 - **`gcc/config/quark.h`** — the whole port, and it is short: the default code
   model, red zone and PIC settings; `crt0.o`; `-lc`; the link script by
   absolute path through the sysroot; and `__quark__`.
-- **libgcc is built without coverage.** `libgcov` calls `fork` and `exec`, and
-  Quark has neither. That is not a gap to fill later — a system where a task is
-  created, given an address space and started does not have a fork to offer, so
-  the honest configuration is the one that does not ask for it.
+- **libgcc is built without coverage.** `libgcov` calls `fork` and `exec`,
+  and when this was configured Quark had neither. It has both now; coverage
+  stays off because nothing has asked for it, and turning it on is one
+  `--enable-gcov` and a rebuild.
 
 ## The sysroot
 
@@ -131,8 +158,9 @@ than a workaround:
 
 - **A stack worth the name.** Programs got sixteen kilobytes. GNU `wc` puts a
   quarter of a megabyte on its stack in one frame and faulted on the first
-  write to it. It is a megabyte now, mapped eagerly because there is no demand
-  paging — which is also why it is not Linux's eight.
+  write to it. It is a megabyte now, and all of it is given when the program
+  starts: the spawner builds the stack in its own memory and moves the pages
+  across — which is why it is not Linux's eight.
 - **A manifest per image, not per program.** File data moved through a page the
   program owned then, so a program that opened a file needed a capability to
   allocate one. coreutils does not know that; it called `fopen`. The C library
@@ -170,11 +198,11 @@ install rather than a checkout — so it takes a directory somebody else built:
     make -C ../explosion hd COREUTILS=/path/to/build-coreutils-quark/src
 
 The programs are stripped on the way in, because the debug info is three
-quarters of 54 MB and the root filesystem was 33 (it is 64 now). Quark's own
-userland keeps its names: `ls` here is the in-tree one. coreutils' would list a
-directory too, since the layer answers `getdents64`, but it is not what the
-rest of the system expects to find. With `COREUTILS` unset the staging step
-takes back anything a previous one put there.
+quarters of 54 MB. Quark's own userland keeps its names: `ls` here is
+quarkutils' one, and so are `cat` and `echo`. coreutils' would do the job too
+— the layer answers `getdents64` — but ExplOSion is the distribution that
+shows Quark's own programs. With `COREUTILS` unset the staging step takes
+back anything a previous one put there.
 
 ## libffi and libwayland
 
@@ -232,7 +260,13 @@ disconnected
 ```
 
 Twelve bytes of real Wayland protocol, marshalled by upstream libwayland and
-written down a Quark socketpair. What is missing is the thing on the other end.
+written down a Quark socketpair. That was the whole of it when this was
+written; the thing on the other end is `wm` now, in quarkutils, and
+`quarkutils/docs/wayland.md` says what it implements.
+
+`build-wayland.sh` also installs the libraries, the headers and the scanner
+into the musl prefix, and `build-wayland-protocols.sh` puts the protocol XML
+beside them, which is where GTK's build looks.
 
 ## The font stack
 
@@ -293,9 +327,12 @@ What each needed:
   out of `fonts.conf`. Its cache writer found the last two gaps below.
 - **cairo**: its FreeType and fontconfig backends switched on. The host cairo
   gets FreeType only, and gives `cairotext` its checksum.
-- **libxkbcommon**: the library alone, and no `xkeyboard-config`. A Wayland
-  client compiles the keymap the compositor sends, so the image carries just
-  that keymap, as `/usr/share/xkb/us.xkb`, for `xkbtest`.
+- **libxkbcommon**: the library alone. A Wayland client compiles the keymap
+  the compositor sends, so for most clients the image needs no keyboard data
+  at all; it carries that one keymap, as `/usr/share/xkb/us.xkb`, for
+  `xkbtest`. GTK is the exception — it builds a default keymap by name before
+  it has heard from a compositor — and `stage-xkb.sh` stages the part of
+  `xkeyboard-config` that takes.
 
 **The fonts.** `stage-fonts.sh` lays four DejaVu faces out in
 `/usr/share/fonts/dejavu` with their `LICENSE`: the fonts may be copied
@@ -316,7 +353,7 @@ What the ports needed of the system, and got:
   and shortening files; `O_TRUNC`, `O_EXCL` and `O_DIRECTORY`; `stat` with
   real inode numbers, link counts and times; `getdents64`, `statfs`,
   `readlink`, `uname` and `getcwd`. The VFS protocol is written down in
-  `quark/docs/vfs.md`.
+  `quarkutils/docs/vfs.md`.
 - **A clock.** The kernel reads the CMOS clock at boot, so files are dated and
   `time()` is the time. fontconfig compares dates to decide whether a cache is
   stale, and `e2fsck` reads a small deletion time as something else entirely.
@@ -330,6 +367,117 @@ What the ports needed of the system, and got:
   a call's hand-over reopened interrupts between marking the callee runnable
   and switching to it, and a tick there left the callee in no queue. `dtest
   calls` reproduces that in three seconds and has not seen it since the fix.
+
+## Weston's clients
+
+`weston-simple-shm` and `weston-terminal` are weston's own, compiled from its
+tree as they are.
+
+    ./toolchain/build-pixman.sh ~/opt/src/pixman-0.44.2 /tmp/suite-pixman
+    ./toolchain/build-libpng.sh ~/opt/src/libpng-1.6.44
+    ./toolchain/build-weston-client.sh ~/opt/src/wayland-1.23.1 clients
+    ./toolchain/build-weston-toytoolkit.sh ~/opt/src/wayland-1.23.1 clients
+    make hd WAYLAND_CLIENTS=$PWD/clients
+
+`build-weston-client.sh` also builds the five small clients whose sources are
+here — `wlprobe`, `wlcairo`, `wlclip`, `wlscroll` and `wlfuzz` — and generates
+the `xdg-shell` stubs with the scanner that was built beside libwayland,
+because stubs from a different version describe interface structures laid out
+differently.
+
+`clients/window.c` is the toolkit every weston client with a window is written
+against, and `weston-terminal` is one program on top of it. It is not a
+library anybody ships, which is why it was the right thing to port: ordinary
+client code, written against Wayland and POSIX and nothing else, so everything
+it wanted that Quark had not got was a hole in Quark. `fork`, `execve`, a
+pseudo-terminal and `timerfd` were all found this way. Weston builds with
+meson and a generated `config.h`; `build-weston-toytoolkit.sh` writes the
+small part of it these files read, since setting meson up to cross-compile a
+project whose compositor half cannot build here is a larger thing than the
+eight files that are wanted.
+
+pixman builds its generic C path and nothing else — the SIMD paths are chosen
+at run time and each is a change to measure — and brings its own test suite,
+thirty-one programs, as `pixman.tests`.
+
+## The toolkit
+
+glib, harfbuzz, fribidi, pango, graphene, gdk-pixbuf and GTK 4 build for
+Quark, and `hello-world` is GTK's own `examples/hello/hello-world.c`: a window,
+a button, and "Hello World" on the console when it is clicked.
+
+    ./toolchain/bootstrap-toolkit.sh
+    ./toolchain/build-libstdcxx.sh ~/opt/src/gcc
+    ./toolchain/build-pcre2.sh    ~/opt/src/pcre2-10.44
+    ./toolchain/build-glib.sh     ~/opt/src/glib-2.82.5
+    ./toolchain/build-harfbuzz.sh ~/opt/src/harfbuzz-10.1.0
+    ./toolchain/build-fribidi.sh  ~/opt/src/fribidi-1.0.16
+    ./toolchain/build-pango.sh    ~/opt/src/pango-1.54.0
+    ./toolchain/build-graphene.sh ~/opt/src/graphene-1.10.8
+    ./toolchain/build-libjpeg.sh  ~/opt/src/libjpeg-turbo-3.0.4
+    ./toolchain/build-libtiff.sh  ~/opt/src/tiff-4.7.0
+    ./toolchain/build-gdk-pixbuf.sh ~/opt/src/gdk-pixbuf-2.42.12
+    ./toolchain/build-epoxy.sh    ~/opt/src/libepoxy-1.5.10
+    ./toolchain/install-egl-headers.sh
+    ./toolchain/build-wayland-protocols.sh ~/opt/src/wayland-protocols-1.38
+    ./toolchain/build-gtk.sh      ~/opt/src/gtk-4.16.7
+    ./toolchain/build-gtk-client.sh ~/opt/src/gtk-4.16.7 clients
+    ./toolchain/stage-xkb.sh ~/opt/src/xkeyboard-config-2.43 /tmp/overlay
+    make hd WAYLAND_CLIENTS=$PWD/clients ROOT_OVERLAYS=/tmp/overlay
+
+What is true of every one of them:
+
+- **Static, and not PIC.** There is no dynamic loader, so
+  `-Ddefault_library=static -Db_staticpic=false` is on every meson build
+  (`meson-cross-quark.ini`), cmake gets the same from
+  `cmake-cross-quark.cmake`, and the compiler wrapper drops `-fPIC` whatever a
+  build system says. A module that would be `dlopen`ed has to be built in:
+  gdk-pixbuf's loaders are, which is also why no loader cache is needed.
+- **glib is built twice.** Three of its tools are C programs rather than
+  Python — `glib-compile-resources`, `glib-compile-schemas`,
+  `gio-querymodules` — and GTK's build runs two of them to turn XML into C.
+  The copies in the target prefix are Quark programs and cannot run here, so
+  `build-glib.sh` also builds a native glib into `$QUARK_HOSTDEPS`, and every
+  script after it puts that on `PATH` first.
+- **C++ is its own step.** harfbuzz is C++. `build.sh` builds `cc1plus`, and
+  `build-libstdcxx.sh` builds the library against musl afterwards.
+
+What each needed:
+
+- **glib** needed the most, and all of it from Quark: `eventfd`, a futex wait
+  that honours its timeout, an `O_NONBLOCK` that `read` and `write` obey, and
+  a `poll` with no descriptors that waits. Its main loop wakes itself by
+  writing to an eventfd and drains it "until it is empty"; with a read that
+  waited instead of answering `EAGAIN`, the loop stopped holding its own lock.
+  `tests/gsync.c` and `tests/polltest.c` are those four as tests.
+- **harfbuzz** and **pango** needed nothing but the above, and a program
+  bigger than four megabytes to be loadable: a spawner reads the whole image
+  before it gives the pages away, and its limit was 4 MiB. It is 32.
+- **libjpeg-turbo** is the one cmake build. **libtiff** is built for GTK,
+  which decodes TIFF itself; gdk-pixbuf's own TIFF loader is off
+  (`-Dtiff=disabled`), since gdk-pixbuf's tools do not carry libtiff on their
+  link line. Every other loader is built in, because a loader left out is
+  built as a shared module, and a shared module cannot link the non-PIC static
+  library everything else here is.
+- **libepoxy** is built with EGL "on" and the Khronos headers installed beside
+  it, because GTK includes `epoxy/egl.h` whatever it draws with. There is no
+  GL: epoxy looks for an implementation at run time and correctly finds none,
+  and GSK falls back to its cairo renderer.
+- **GTK** has no static build — `gtk/meson.build` says `shared_library` and
+  offers no choice. It does have the `static_library` the shared one wraps, so
+  `build-gtk.sh` builds those targets and `build-gtk-client.sh` links a
+  program against them, the same shape as the toytoolkit.
+- **The compiler says this is a Unix.** `gcc/config/quark.h` defines
+  `__unix__`, because portable code asks that rather than asking for a system
+  by name. The Khronos EGL headers were the first to stop without it: their
+  platform list has an arm for `__unix__` and an `#error` after it.
+- **The sysroot's Linux headers lost `linux/dma-buf.h`.** Every other header
+  there describes something a program can ask for and be told no. That one is
+  asked at build time, and a yes makes a toolkit compile a path that cannot
+  work.
+
+A toolkit program is twenty-five megabytes and is in memory twice while it
+starts, so QEMU is given a gigabyte and the root filesystem is 128 MiB.
 
 
 ## Tests, and the two fuzzers
