@@ -20,6 +20,7 @@ seltest
 ptytest
 ttytest
 sigtest
+pidtest
 timertest
 shelltest
 cxxtest
