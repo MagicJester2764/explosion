@@ -38,6 +38,8 @@ filesystem fills up instead, and the error is `Could not allocate block` from
 make stage     # install ../quark, then ../quarkutils, then Bang, into stage/
 make hd        # hdimage.bin with an ext2 root   (hd-ext4, hd-fat32)
 make run       # boot it                         (run-ext4, run-fat32)
+make iso       # explosion.iso: the root in memory, from a file Bang loads
+make run-iso   # boot it, with DISK=<image> attached to install onto
 ```
 
 - **The kernel is installed before the userland**, into the same directory.
@@ -49,6 +51,12 @@ make run       # boot it                         (run-ext4, run-fat32)
   somebody else's build, and each stager records what it put in the stage and
   takes it back out when it runs again without. So the same command line has
   to be given every time, or the image quietly loses its fonts.
+- **The ISO's root is a boot module.** `live.img` is an ext2 image of the
+  stage, put on the EFI partition as `\drivers\LIVE.IMG`; Bang loads every
+  file there, `init` starts `ramdisk` on that one with the right to map
+  exactly its memory, and the file server is told its root is `ram0`. So a
+  live system costs its root in memory, twice while Bang reads it, and
+  `-m 1G` is not generous. `tools/make-esp.sh` builds both EFI partitions.
 - **`make -o stage hd` does not rebuild `fat.img`.** A change to `init` or to
   the kernel needs the image rules to run; when in doubt, `make stage` first.
 - **Names.** Quark's own install names files the way FAT wants them

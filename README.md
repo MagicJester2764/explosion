@@ -22,12 +22,20 @@ like.
 make stage   # build ../quark, ../quarkutils and ../bang, collect into stage/
 make hd      # assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 make run     # boot it in QEMU
+make iso     # assemble explosion.iso: a system that runs from memory
+make run-iso # boot that
 ```
 
 The root is ext2 unless asked otherwise: `make hd-ext4` and `make run-ext4`
 give it ext4 with a journal, `make hd-fat32` and `make run-fat32` FAT32.
-`make cd` and `make run-iso` produce an ISO that boots the EFI partition; it
-carries no root filesystem, so it gets as far as the services in `boot.img`.
+
+`explosion.iso` is the same system with its root somewhere else. The root
+filesystem is one more file on the EFI partition, which Bang loads into
+memory with the kernel and a RAM disk serves; nothing in it has to be able
+to read the disc it came on. The one image boots as a CD and, written to a
+USB stick, as a disk: its EFI partition is named in an El Torito catalog
+for the first and in a GPT for the second. What is written to the root
+while it runs is written to memory and gone at power-off.
 
 `make clean` removes the staging directory and the images. `make distclean`
 also cleans the trees next door.

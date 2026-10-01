@@ -5,6 +5,9 @@
 #
 # `IMG` is the image to boot and `RUNDIR` where the emulator's sockets and log
 # go, so that two boots — an ext2 one and an ext4 one — can run at once.
+# `ISO` is a disc to boot from instead: with it, `IMG` is a disk to have
+# attached as well — the one an installer installs onto — and there is no
+# disk at all if `IMG` is not said.
 # `CPU` is the processor to emulate: `max` unless said otherwise, which has SMEP
 # and SMAP. `CPU=qemu64` has neither, and is how the kernel is tried on a
 # machine where it cannot turn them on.
@@ -30,7 +33,12 @@
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
 RUN=${RUNDIR:-${TMPDIR:-/tmp}/quark-boot-test}
-IMG=${IMG:-hdimage.bin}
+if [ -n "$ISO" ]; then
+    DRIVES="-cdrom $ISO"
+    [ -n "$IMG" ] && DRIVES="$DRIVES -hda $IMG"
+else
+    DRIVES="-hda ${IMG:-hdimage.bin}"
+fi
 mkdir -p "$RUN"
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
@@ -51,7 +59,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -m
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
-  -hda "$IMG" -display none \
+  $DRIVES -display none \
   -device rtl8139,netdev=n -netdev user,id=n \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &

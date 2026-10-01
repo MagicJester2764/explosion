@@ -8,6 +8,8 @@
 #   make stage   collect artifacts from ../quark, ../quarkutils and ../bang
 #   make hd      assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 #   make run     boot it in QEMU
+#   make iso     assemble explosion.iso, which boots from memory
+#   make run-iso boot that, with DISK=<image> as a disk to install onto
 #
 # Nothing here is reached into by its neighbours: the dependency runs one way,
 # from the distro down to the kernel, the userland and the bootloader.
@@ -65,7 +67,7 @@ TEST_SUITES     ?=
 # all, and a later stage without it takes its files back out.
 ROOT_OVERLAYS   ?=
 
-.PHONY: all stage hd hd-ext4 hd-fat32 cd run run-ext4 run-fat32 run-iso clean distclean FORCE
+.PHONY: all stage hd hd-ext4 hd-fat32 iso run run-ext4 run-fat32 run-iso clean distclean FORCE
 
 all: hd
 
@@ -186,46 +188,19 @@ $(eval $(call ROOTFS_RULE,$(ROOTFS_EXT2_IMG),mkfs.ext2 -b 1024 -F -q))
 $(eval $(call ROOTFS_RULE,$(ROOTFS_EXT4_IMG),mkfs.ext4 -b 1024 -F -q -J size=1))
 
 # The EFI system partition: the loader, the kernel it loads, and the modules it
-# hands the kernel. boot.img rides along as a module.
+# hands the kernel. boot.img rides along as a module. tools/make-esp.sh says
+# what goes in and writes the boot menu to match.
+ESP_KB   := $(shell expr $(ROOTFS_SIZE_KB) + 3072)
+ESP_ENV   = SHELL_EFI="$(SHELL_EFI)" LINUX_KERNEL="$(LINUX_KERNEL)" INITRD="initrd.img"
+
 fat.img: stage $(BOOT_IMG)
-	$(eval BOOT_FAT_KB := $(shell expr $(ROOTFS_SIZE_KB) + 3072))
-	dd if=/dev/zero of=fat.img bs=1k count=$(BOOT_FAT_KB) status=none
-	mformat -i fat.img ::
-	mmd -i fat.img ::/EFI
-	mmd -i fat.img ::/EFI/BOOT
-	mcopy -i fat.img $(STAGE)/BOOTX64.EFI ::/EFI/BOOT
-	mcopy -i fat.img $(STAGE)/kernel.bin ::/kernel.bin
-	@# The boot menu is written to match what actually goes into the image, so
-	@# it never offers something that is not there. Anything beyond Quark is
-	@# whatever this build host happened to have lying around: a UEFI shell to
-	@# show that Bang can hand off to another EFI application at all — which is
-	@# how it would reach a Windows boot manager — and a Linux kernel to show
-	@# the handover protocol working.
-	@cp bang.cfg $(STAGE)/bang.cfg
-	@if [ -f $(SHELL_EFI) ]; then \
-		mmd -i fat.img ::/EFI/tools; \
-		mcopy -i fat.img $(SHELL_EFI) ::/EFI/tools/Shell.efi; \
-		printf '\nentry UEFI Shell\n    chainload \\EFI\\tools\\Shell.efi\n' >> $(STAGE)/bang.cfg; \
-	 fi
-	@if [ -n "$(LINUX_KERNEL)" ] && [ -f "$(LINUX_KERNEL)" ]; then \
-		mcopy -i fat.img $(LINUX_KERNEL) ::/vmlinuz; \
-		printf '\nentry Linux\n    linux   \\vmlinuz\n' >> $(STAGE)/bang.cfg; \
-		if [ -f initrd.img ]; then \
-			mcopy -i fat.img initrd.img ::/initrd.img; \
-			printf '    initrd  \\initrd.img\n' >> $(STAGE)/bang.cfg; \
-		fi; \
-		printf '    options console=ttyS0 earlyprintk=serial,ttyS0 panic=5\n' >> $(STAGE)/bang.cfg; \
-	 fi
-	mcopy -i fat.img $(STAGE)/bang.cfg ::/bang.cfg
-	mmd -i fat.img ::/drivers
-	@for f in $(STAGE)/drivers/*; do mcopy -i fat.img "$$f" ::/drivers/; done
-	mcopy -i fat.img $(BOOT_IMG) ::/drivers/boot.img
+	$(ESP_ENV) ./tools/make-esp.sh fat.img $(ESP_KB) $(STAGE) $(BOOT_IMG)
 
 # ---------------------------------------------------------------------------
 # Disk images
 # ---------------------------------------------------------------------------
 
-HD_SECTORS = $(shell expr '(' $(ROOTFS_SIZE_KB) + 3072 + $(ROOTFS_SIZE_KB) + 2048 ')' '*' 2)
+HD_SECTORS = $(shell expr '(' $(ESP_KB) + $(ROOTFS_SIZE_KB) + 2048 ')' '*' 2)
 
 hd: fat.img $(ROOTFS_EXT2_IMG)
 	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
@@ -242,10 +217,39 @@ hd-fat32: fat.img $(ROOTFS_IMG)
 		--part fat.img --type system \
 		--part $(ROOTFS_IMG) --type linux
 
-cd: fat.img
+# ---------------------------------------------------------------------------
+# The live system, and the ISO it boots from
+# ---------------------------------------------------------------------------
+
+# A system that runs from memory. Its root is a filesystem image the
+# bootloader loads as a module — one more file in \drivers — and a RAM disk
+# serves. Nothing on it has to be able to read the medium it was booted from,
+# which is what lets one image boot from a CD and from a USB stick on a
+# machine there is no disk driver for.
+LIVE_IMG := live.img
+ESP_LIVE := fat-live.img
+ISO      := explosion.iso
+# The root, and what the FAT around it needs for itself.
+ESP_LIVE_KB := $(shell expr $(ROOTFS_SIZE_KB) + 16384)
+
+$(eval $(call ROOTFS_RULE,$(LIVE_IMG),mkfs.ext2 -b 1024 -F -q))
+
+$(ESP_LIVE): stage $(BOOT_IMG) $(LIVE_IMG)
+	$(ESP_ENV) ./tools/make-esp.sh $(ESP_LIVE) $(ESP_LIVE_KB) $(STAGE) $(BOOT_IMG) $(LIVE_IMG):LIVE.IMG
+
+# One image for both: the EFI partition is appended to an ISO 9660
+# filesystem and named twice — in an El Torito catalog, which is where
+# firmware looks on a CD, and in a GPT, which is where it looks on a disk.
+# What the ISO filesystem itself holds is for whoever opens the disc on
+# another system: what this is, and how to install it.
+iso: $(ESP_LIVE)
+	rm -rf iso
 	mkdir -p iso
-	cp fat.img iso
-	xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o cdimage.iso iso
+	cp README.md iso/README.TXT
+	xorriso -as mkisofs -R -J -V EXPLOSION -o $(ISO) \
+		-append_partition 2 0xef $(ESP_LIVE) -appended_part_as_gpt \
+		-e --interval:appended_partition_2:all:: -no-emul-boot \
+		-partition_offset 16 iso
 
 # ---------------------------------------------------------------------------
 # Running
@@ -278,14 +282,16 @@ run-ext4: hd-ext4
 run-fat32: hd-fat32
 	qemu-system-x86_64 $(QEMU_FLAGS) -hda $(HD_IMG)
 
-run-iso: cd
-	qemu-system-x86_64 $(QEMU_FLAGS) -cdrom cdimage.iso
+# With a disk to install onto, if there is one to hand: DISK=target.img.
+run-iso: iso
+	qemu-system-x86_64 $(QEMU_FLAGS) -serial stdio -cdrom $(ISO) $(if $(DISK),-hda $(DISK))
 
 # ---------------------------------------------------------------------------
 
 clean:
 	rm -rf $(STAGE) iso
-	rm -f fat.img $(BOOT_IMG) $(ROOTFS_IMG) $(ROOTFS_EXT2_IMG) $(ROOTFS_EXT4_IMG) $(HD_IMG) cdimage.iso
+	rm -f fat.img $(BOOT_IMG) $(ROOTFS_IMG) $(ROOTFS_EXT2_IMG) $(ROOTFS_EXT4_IMG) $(HD_IMG)
+	rm -f $(LIVE_IMG) $(ESP_LIVE) $(ISO)
 
 # Also clean the trees we build from.
 distclean: clean
