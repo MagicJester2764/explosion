@@ -19,6 +19,7 @@ chmodtest
 seltest
 ptytest
 ttytest
+sigtest
 timertest
 shelltest
 cxxtest
