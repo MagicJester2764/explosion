@@ -14,12 +14,11 @@
 #   - A program is one that starts at Quark's load address. A build tree also
 #     holds helpers built for the *host* — same architecture, same file type,
 #     and no business in an image.
-#   - Quark's own userland keeps its names. coreutils `ls` wants `getdents64`
-#     and Quark has none; the in-tree one lists a directory over the VFS
-#     protocol and works. Rather than decide that case by case, whatever is
+#   - Quark's own userland keeps its names. ExplOSion is the distribution that
+#     shows quarkutils' programs, so where both have an `ls` it is quarkutils'
+#     that is staged. Rather than decide that case by case, whatever is
 #     already staged stays.
-#   - Strip. Debug info is three quarters of 54 MB and the root filesystem is
-#     33.
+#   - Strip. Debug info is three quarters of 54 MB.
 #
 # What was staged is recorded, so a later stage with no coreutils takes them
 # back out instead of leaving an image half-built from something removed.
