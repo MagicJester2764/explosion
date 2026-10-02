@@ -109,6 +109,15 @@ tools/crash-test.sh                           # stop mid-write, recover, check
 tools/install-test.sh                         # install from the ISO; start the disk
 ```
 
+Every one of them gives the machine one processor unless `SMP` says how
+many, and a change is tested on one and on four (`SMP=4 tools/…`): they
+find different mistakes. With one, nothing runs at the same time as
+anything. With four, a program is ended in the middle of a call it made, a
+child is running before its parent has finished making it, and two threads
+are in the same memory at once — a removed directory left on the disk, a
+file that would not map and a wait told its child was process 0 were each
+found only there. `make run` gives it four.
+
 `crash-test.sh` stops the machine with three things on the disk — a removed
 file a program still holds, a file written and synced, and, on ext4, a
 directory being changed as it stops — and recovers the disk twice: with

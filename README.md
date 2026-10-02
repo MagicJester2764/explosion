@@ -55,7 +55,8 @@ OVMF; set `OVMF_PATH` to use another.
 QEMU is started with `-cpu max`, deliberately: the default CPU models expose
 neither SMEP nor SMAP, so without it the kernel's supervisor-mode protections
 are silently off and a boot proves nothing about them. It gets a gigabyte of
-memory, and KVM when the machine has it.
+memory, four processors (`make run SMP=1` for one), and KVM when the machine
+has it.
 
 ## What goes in an image
 

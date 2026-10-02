@@ -316,7 +316,13 @@ KVM := $(shell test -w /dev/kvm && echo -enable-kvm)
 # megabytes, and a spawner reads the whole image into its own memory before
 # giving the pages to the child — so the same program is in memory twice while
 # it starts. Nothing here is paged out, either.
-QEMU_FLAGS = $(KVM) -cpu max -m 1G -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
+#
+# Four processors, because the kernel uses every one the machine has and a
+# machine somebody runs this on has more than one: `make run SMP=1` for the
+# other kind. (`tools/boot-test.sh` gives a machine one unless told, and
+# what is tested is tested on both.)
+SMP ?= 4
+QEMU_FLAGS = $(KVM) -cpu max -smp $(SMP) -m 1G -L $(OVMF_PATH)/ -pflash $(OVMF_PATH)/OVMF_CODE.fd \
              -device rtl8139,netdev=n -netdev user,id=n
 
 run: hd
