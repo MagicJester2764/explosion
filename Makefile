@@ -107,9 +107,11 @@ all: hd
 # other; this is the only place that knows there are two.
 stage: FORCE
 	@mkdir -p $(STAGE)
-	@# What the last stage took from WAYLAND_CLIENTS and TEST_SUITES, back
-	@# out: this one may have been asked for neither.
-	@./tools/stage-forget.sh $(STAGE) .clients .suites
+	@# What the last stage took from WAYLAND_CLIENTS, TEST_SUITES and the
+	@# overlays, back out: this one may have been asked for none of them.
+	@# Before the installs, so that a file one of those had replaced — an
+	@# overlay's /etc/passwd — is put back by the tree that owns it.
+	@./tools/stage-forget.sh $(STAGE) .clients .suites .overlays
 	$(MAKE) -C $(QUARK_DIR) install DESTDIR=$(CURDIR)/$(STAGE)
 	$(MAKE) -C $(QUARKUTILS_DIR) install DESTDIR=$(CURDIR)/$(STAGE) REQUIRE_ABI=1
 	$(MAKE) -C $(BANG_DIR) build
@@ -174,7 +176,6 @@ stage: FORCE
 		done; \
 		echo "tests: staged $$n programs from $$d"; \
 	done
-	@# Runs either way, like stage-coreutils.sh, so unsetting it un-stages.
 	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)

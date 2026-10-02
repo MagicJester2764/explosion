@@ -3,13 +3,13 @@
 #
 #     tools/stage-forget.sh <stage-dir> <record>...
 #
-# The clients and the test suites are somebody else's builds, staged when a
-# variable names them. Each file is written down as it is staged, in a
-# record at the top of the stage, and this removes them before the next
-# stage begins: so an image built without the variable has nothing of the
-# variable's in it, instead of whatever the last build left. Run before the
-# kernel and the userland install, so that a file one of them owns and a
-# suite had replaced is put back.
+# The clients, the test suites and the overlays are somebody else's builds,
+# staged when a variable names them. Each file is written down as it is
+# staged, in a record at the top of the stage, and this removes them before
+# the next stage begins: so an image built without the variable has nothing
+# of the variable's in it, instead of whatever the last build left. Run
+# before the kernel and the userland install, so that a file one of them
+# owns and an overlay had replaced is put back.
 set -e
 STAGE=${1:?usage: stage-forget.sh <stage-dir> <record>...}
 shift

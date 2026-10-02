@@ -4,9 +4,11 @@
 #     tools/stage-overlays.sh <stage-dir> [overlay...]
 #
 # Fonts and configuration are built by scripts in toolchain/ that need the
-# cross toolchain, the same arrangement as COREUTILS. What was staged is
-# recorded, so a later stage without an overlay takes its files back out, and
-# the directories that leaves empty go too.
+# cross toolchain, the same arrangement as COREUTILS. What is staged is
+# recorded, and tools/stage-forget.sh takes it back out at the start of the
+# next stage — before the kernel and the userland install, not here. Taken
+# out here, after them, a file an overlay had replaced was gone for good:
+# an overlay with an /etc/passwd of its own left the next image without one.
 set -e
 STAGE=${1:?usage: stage-overlays.sh <stage-dir> [overlay...]}
 shift
@@ -16,21 +18,6 @@ LIST=$STAGE/.overlays
 set -f
 IFS='
 '
-if [ -f "$LIST" ]; then
-    while read -r path; do
-        if [ -n "$path" ]; then
-            rm -f "$STAGE/$path"
-        fi
-    done < "$LIST"
-    rm -f "$LIST"
-    for top in usr etc var; do
-        if [ -d "$STAGE/$top" ]; then
-            find "$STAGE/$top" -mindepth 1 -depth -type d -empty -delete
-        fi
-    done
-    # Quark's install fills usr and etc; nothing but an overlay makes var.
-    rmdir "$STAGE/var" 2>/dev/null || true
-fi
 for dir in "$@"; do
     if [ ! -d "$dir" ]; then
         echo "overlay: $dir is not a directory" >&2
