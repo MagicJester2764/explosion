@@ -168,7 +168,11 @@ ISO=$ISO_PATH IMG=$DISK RUNDIR=$RUN/install sh "$HERE/boot-test.sh" "$RUN/instal
 grep -E 'gave up|^saw:|^off:|FAULT' "$RUN/install.out" || true
 
 echo "install-test: starting the installed disk, with no ISO"
-IMG=$DISK RUNDIR=$RUN/first-boot sh "$HERE/boot-test.sh" "$RUN/first-boot.keys" "$RUN/first-boot.ppm" \
+# With none, whatever the caller named: `ISO=` in the environment is how a
+# disc other than explosion.iso is said, and left there it was inherited by
+# this boot too — which then started the disc again, logged in to the system
+# running from memory, and checked that instead of the one installed.
+ISO= IMG=$DISK RUNDIR=$RUN/first-boot sh "$HERE/boot-test.sh" "$RUN/first-boot.keys" "$RUN/first-boot.ppm" \
     > "$RUN/first-boot.out" 2>&1 || failed=1
 grep -E 'gave up|^saw:|^off:|FAULT' "$RUN/first-boot.out" || true
 
