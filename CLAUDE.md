@@ -90,8 +90,8 @@ make run-iso   # boot it, with DISK=<image> attached to install onto
   shell and `init` look for (`hello`, `passwd`) and leaves every name with a
   lowercase letter in it alone — `DejaVuSans.ttf` was chosen on purpose.
 - **Staged times reach the image, in whole seconds.** fontconfig decides
-  whether a cache is stale by a directory's time, and Quark's clock has no
-  fraction.
+  whether a cache is stale by a directory's time, and a file's time here is
+  kept in whole seconds, whatever the clock can say.
 
 ## Testing
 

@@ -243,6 +243,7 @@ ada may: power, tasks, become. From their next login.
 | `power` | the ports that turn the machine off and restart it |
 | `tasks` | authority over every task: ending anybody's program |
 | `become` | nothing at login; it lets `as` take the account's own password |
+| `clock` | the right to set the date: `date -s 2026-10-02 18:30:00` |
 | `all` | all of it, and the right to say who a task is. Root's, unless a line says otherwise |
 
 A program that needs a right its account has not got says so — `shutdown:

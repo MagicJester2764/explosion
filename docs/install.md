@@ -110,7 +110,8 @@ What an account may *do* is not a matter of being root or not. It is said
 account by account, and the fourth command says it: `power` lets ada turn
 the machine off and restart it, and `become` lets ada run a command as
 another user — `as root mount /dev/disk0p1 /mnt` — on ada's own password.
-There is also `tasks`, to end anybody's programs. The last command shows
+There is also `tasks`, to end anybody's programs, and `clock`, to set the
+date (`date -s 2026-10-02 18:30:00`, in UTC). The last command shows
 who there is and what each may do. `user ada may not become` takes a right
 back, and all of it works on a running system without `--root`.
 

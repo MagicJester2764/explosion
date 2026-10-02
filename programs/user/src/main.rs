@@ -22,6 +22,7 @@
 //! - `power`: turn the machine off, and restart it.
 //! - `tasks`: end any program, whoever's.
 //! - `become`: run a command as another user with one's own password (`as`).
+//! - `clock`: set the date, which is the machine's and everybody's (`date -s`).
 //!
 //! They are kept in `/etc/rights` and handed to a session when it begins,
 //! as capabilities: a right taken back is gone from the next login. Root
@@ -43,7 +44,7 @@ fn usage() -> ! {
     println!("usage: user [--root DIR]                        everybody, and what each may do");
     println!("       user [--root DIR] add NAME               a new user");
     println!("       user [--root DIR] remove NAME            take one away");
-    println!("       user [--root DIR] NAME may RIGHT...      power, tasks, become");
+    println!("       user [--root DIR] NAME may RIGHT...      power, tasks, become, clock");
     println!("       user [--root DIR] NAME may not RIGHT...");
     syscall::sys_exit_code(2);
 }
@@ -157,7 +158,7 @@ pub extern "C" fn _start() -> ! {
             let mut now = accounts::rights_of(rights, user.name, user.uid).0;
             for word in named {
                 let Some(bit) = Rights::named(word) else {
-                    fail(format_args!("{} is not a right: there are power, tasks, become and all", text(word)));
+                    fail(format_args!("{} is not a right: there are power, tasks, become, clock and all", text(word)));
                 };
                 now = if giving { now | bit } else { now & !bit };
             }
