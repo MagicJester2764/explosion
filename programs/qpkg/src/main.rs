@@ -178,6 +178,9 @@ enum Line<'a> {
     Dir(u32, &'a [u8]),
     /// `f CRC SIZE PATH`: a file it owns.
     File(u32, u64, &'a [u8]),
+    /// `y CRC SIZE PATH`: a file it owns that is the system's owner's to
+    /// change — who the users are, their passwords, what a session starts.
+    Yours(u32, u64, &'a [u8]),
     /// `l PATH`: a symbolic link it owns.
     Link(&'a [u8]),
     /// `c PATH WHAT`: what a program of it asks to be allowed.
@@ -208,10 +211,11 @@ fn lines(list: &[u8]) -> impl Iterator<Item = Line<'_>> {
                 let (mode, path) = split(rest)?;
                 Line::Dir(number(mode, 8)? as u32, path)
             }
-            b"f" => {
+            b"f" | b"y" => {
                 let (crc, rest) = split(rest)?;
                 let (size, path) = split(rest)?;
-                Line::File(number(crc, 16)? as u32, number(size, 10)?, path)
+                let (crc, size) = (number(crc, 16)? as u32, number(size, 10)?);
+                if key == b"y" { Line::Yours(crc, size, path) } else { Line::File(crc, size, path) }
             }
             b"l" => Line::Link(rest),
             b"c" => {
@@ -236,7 +240,7 @@ fn said<'a>(list: &'a [u8], key: &[u8]) -> &'a [u8] {
 /// How many files and links a list has, and how many bytes the files are.
 fn weight(list: &[u8]) -> (usize, u64) {
     lines(list).fold((0, 0), |(n, bytes), l| match l {
-        Line::File(_, size, _) => (n + 1, bytes + size),
+        Line::File(_, size, _) | Line::Yours(_, size, _) => (n + 1, bytes + size),
         Line::Link(_) => (n + 1, bytes),
         _ => (n, bytes),
     })
@@ -351,7 +355,7 @@ fn files(vfs_tid: usize, name: &[u8]) -> ! {
     };
     for line in lines(list) {
         match line {
-            Line::File(_, _, path) | Line::Link(path) => println!("{}", text(path)),
+            Line::File(_, _, path) | Line::Yours(_, _, path) | Line::Link(path) => println!("{}", text(path)),
             _ => {}
         }
     }
@@ -362,7 +366,8 @@ fn owner(vfs_tid: usize, path: &[u8]) -> ! {
     let names = Names::read(vfs_tid);
     for i in 0..names.count {
         let Ok(list) = load(vfs_tid, names.get(i)) else { continue };
-        let owns = lines(list).any(|l| matches!(l, Line::File(_, _, p) | Line::Link(p) if p == path));
+        let owns = lines(list)
+            .any(|l| matches!(l, Line::File(_, _, p) | Line::Yours(_, _, p) | Line::Link(p) if p == path));
         if owns {
             println!("{} is from {}", text(path), text(names.get(i)));
             syscall::sys_exit_code(0);
@@ -434,12 +439,24 @@ fn verify(vfs_tid: usize, first: usize) -> ! {
             continue;
         }
         let Ok(list) = load(vfs_tid, name) else { continue };
-        let (mut checked, mut bad) = (0, 0);
+        let (mut checked, mut bad, mut changed) = (0, 0, 0);
         for line in lines(list) {
-            let Line::File(sum, size, path) = line else { continue };
+            let (sum, size, path, yours) = match line {
+                Line::File(sum, size, path) => (sum, size, path, false),
+                Line::Yours(sum, size, path) => (sum, size, path, true),
+                _ => continue,
+            };
             checked += 1;
             let said = match measure(vfs_tid, &crc, b"/", path) {
                 Ok(found) if found == (size, sum) => continue,
+                // Whoever owns the system has changed what is theirs to
+                // change: said, and not counted against it. A file of
+                // passwords that only root may read is the same to a user.
+                Ok(_) if yours => {
+                    changed += 1;
+                    continue;
+                }
+                Err(vfs::ERR_PERMISSION) if yours => continue,
                 Ok(_) => "is not the file that was built",
                 Err(vfs::ERR_NOT_FOUND) => "is missing",
                 Err(_) => "cannot be read",
@@ -448,8 +465,13 @@ fn verify(vfs_tid: usize, first: usize) -> ! {
             bad += 1;
         }
         match bad {
-            0 => println!("{}: {} files, as built", text(name), checked),
-            n => println!("{}: {} of {} files are not as built", text(name), n, checked),
+            0 => print!("{}: {} files, as built", text(name), checked),
+            n => print!("{}: {} of {} files are not as built", text(name), n, checked),
+        }
+        match changed {
+            0 => println!(),
+            1 => println!("; 1 that is yours to change has been"),
+            n => println!("; {} that are yours to change have been", n),
         }
         wrong += bad;
     }
@@ -599,7 +621,7 @@ fn strap(vfs_tid: usize) -> ! {
                     }
                     continue;
                 }
-                Line::File(_, _, path) | Line::Link(path) => path,
+                Line::File(_, _, path) | Line::Yours(_, _, path) | Line::Link(path) => path,
                 _ => continue,
             };
             let dir = match path.iter().rposition(|&b| b == b'/') {

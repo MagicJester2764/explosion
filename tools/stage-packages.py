@@ -6,7 +6,8 @@
 Every file the image will have is given to a package, by `packages.conf`,
 and each package's list is written to <stage-dir>/var/lib/qpkg/NAME: what
 it is, its set, and every file it owns with its length and a checksum —
-and, for every program, what the program's manifest asks to be allowed.
+and, for every program, what the program's manifest asks to be allowed. A
+file `packages.conf` says is the owner's to change (`yours`) is marked so.
 `qpkg`, on the system, reads those lists; `qpkg strap` copies a package by
 one, and the list with it.
 
@@ -50,12 +51,14 @@ def read_conf(path):
             continue
         key, _, rest = line.partition(" ")
         if key == "package":
-            packages.append({"name": rest, "set": "", "about": "", "files": [], "lists": [], "dirs": []})
+            packages.append(
+                {"name": rest, "set": "", "about": "", "files": [], "lists": [], "dirs": [], "yours": []}
+            )
         elif not packages:
             sys.exit(f"{path}: `{key}` before any package")
         elif key in ("set", "about"):
             packages[-1][key] = rest
-        elif key in ("files", "lists"):
+        elif key in ("files", "lists", "yours"):
             packages[-1][key] += rest.split()
         elif key == "dir":
             mode, _, where = rest.partition(" ")
@@ -124,7 +127,10 @@ def main():
             owner["lines"].append(f"l /{path}")
             continue
         data = open(full, "rb").read()
-        owner["lines"].append(f"f {zlib.crc32(data) & 0xFFFFFFFF:08x} {len(data)} /{path}")
+        # A file that is the system's owner's to change is marked: it is
+        # installed as built, and afterwards only looked for.
+        kind = "y" if any(fnmatch.fnmatchcase(path, pat) for pat in owner["yours"]) else "f"
+        owner["lines"].append(f"{kind} {zlib.crc32(data) & 0xFFFFFFFF:08x} {len(data)} /{path}")
         # What a program asks to be allowed, as the spawner will read it.
         if data[:4] == b"\x7fELF":
             asks = [describe(*r) for r in find_all(data) if r[0] != 0]
@@ -152,7 +158,7 @@ def main():
             for mode, where in p["dirs"]:
                 out.write(f"d {mode} /{where}\n")
             out.write("\n".join(p["lines"]) + ("\n" if p["lines"] else ""))
-        total += sum(1 for l in p["lines"] if l[0] in "fl")
+        total += sum(1 for l in p["lines"] if l[0] in "fly")
     print(f"packages: {sum(1 for p in packages if p['lines'] or p['dirs'])} lists for {total} files")
 
 
