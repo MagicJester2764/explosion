@@ -139,7 +139,12 @@ ext4 it first stops the machine twenty-four times without ending it (`hmp
 stop`, a `run` line that recovers a copy of the disk, `hmp cont`), says how
 many stops found a transaction committed to the journal and not yet in
 place, and boots the first such disk, so that the file server's own replay
-is tried and not only `e2fsck`'s.
+is tried and not only `e2fsck`'s. And it does not leave that to a stop: it
+makes one more disk with `debugfs` before the machine first starts — a
+committed transaction that makes a directory, over the filesystem as it was
+with a removed file on the orphan list — and boots that too. A stop found
+the server writing back counts it had read before its replay, once in many
+runs; the made disk finds it every time.
 
 - **One stop is not a crash test.** It finds the disk between transactions
   nine times in ten. Many stops found, the first time they were tried, that

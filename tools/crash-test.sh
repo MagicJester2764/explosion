@@ -29,6 +29,15 @@
 # Then the machine is stopped for good, and the disk as that left it is
 # recovered twice: by e2fsck, and — booting it — by the file server.
 #
+# And where there is a journal, one disk is not left to a stop to find: it is
+# made, with debugfs, before the machine first starts. Its journal holds one
+# committed transaction — a directory made, which moves the free counts and a
+# group's descriptor — over the filesystem as it was before, with a removed
+# file on the orphan list. The file server replays it and frees the orphan,
+# and what it leaves has to be clean: a server that kept what it read before
+# the replay wrote that back with the orphan, undid the transaction in the
+# counts and left the new directory's inode and block free in the bitmaps.
+#
 # Exits 1 if any recovery left damage or lost the synced file.
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
@@ -61,6 +70,59 @@ synced_file() {
         return 1
     fi
 }
+# The root of $IMG, from $PART, back where it came from.
+root_to() {
+    python3 - "$PART" "$1" <<'PY'
+import struct, sys
+with open(sys.argv[2], 'r+b') as f:
+    f.seek(512)
+    hdr = f.read(92)
+    entries, count, size = struct.unpack_from('<QII', hdr, 72)
+    f.seek(entries * 512 + size)
+    first, last = struct.unpack_from('<QQ', f.read(size), 32)
+    f.seek(first * 512)
+    f.write(open(sys.argv[1], 'rb').read())
+PY
+}
+# $RUN/crash-built.img: $IMG's filesystem with a removed file on the orphan
+# list, under a committed transaction that makes a directory.
+built() {
+    cp "$IMG" "$RUN/crash-built.img"
+    root_of
+    python3 -c "
+import sys
+sys.stdout.buffer.write(bytes(range(256)) * 20)" > "$RUN/crash-built.orphan"
+    debugfs -w -R "write $RUN/crash-built.orphan /crash-orphan" "$PART" >/dev/null 2>&1
+    ino=$(debugfs -R "stat /crash-orphan" "$PART" 2>/dev/null | sed -n 's/^Inode: \([0-9]*\).*/\1/p')
+    [ -n "$ino" ] || return 1
+    printf 'unlink /crash-orphan\nsif <%s> links_count 0\nsif <%s> dtime 0\nssv last_orphan %s\n' \
+        "$ino" "$ino" "$ino" | debugfs -w -f - "$PART" >/dev/null 2>&1
+    # What the transaction makes of that, and the blocks it changes.
+    cp "$PART" "$RUN/crash-built.ext"
+    debugfs -w -R "mkdir /crash-replayed" "$RUN/crash-built.ext" >/dev/null 2>&1
+    bs=$(dumpe2fs -h "$PART" 2>/dev/null | sed -n 's/^Block size: *//p')
+    blocks=$(python3 - "$PART" "$RUN/crash-built.ext" "$RUN/crash-built.blocks" "$bs" <<'PY'
+import sys
+a = open(sys.argv[1], 'rb').read()
+b = open(sys.argv[2], 'rb').read()
+bs = int(sys.argv[4])
+out = open(sys.argv[3], 'wb')
+changed = []
+for n in range(len(a) // bs):
+    if a[n * bs:(n + 1) * bs] != b[n * bs:(n + 1) * bs]:
+        changed.append(n)
+        out.write(b[n * bs:(n + 1) * bs])
+print(','.join(map(str, changed)))
+PY
+)
+    : > "$RUN/crash-built.ext"
+    [ -n "$blocks" ] || return 1
+    printf 'jo\njw -b %s %s\njc\n' "$blocks" "$RUN/crash-built.blocks" \
+        | debugfs -w -f - "$PART" >/dev/null 2>&1
+    dumpe2fs -h "$PART" 2>/dev/null | grep -q needs_recovery || return 1
+    root_to "$RUN/crash-built.img"
+}
+
 # The disk as it stands, recovered by e2fsck: 0 if that left a clean
 # filesystem with the synced file in it, having found nothing to repair but
 # a journal to replay and an orphan to clear.
@@ -113,9 +175,17 @@ sys.stdout.buffer.write(bytes((n * 131 + i * 7 + 3) & 255 for n in range(75) for
 
 root_of
 : > "$PART.stops"
+BUILT=0
 if dumpe2fs -h "$PART" 2>/dev/null | grep -q has_journal; then
     COMMAND="dchild crashed /tmp writing"
     LAST="^writing /tmp\$"
+    if built; then
+        BUILT=1
+    else
+        echo "== a disk with a transaction to replay could not be made"
+        STATUS=1
+    fi
+    root_of
 else
     COMMAND="dchild crashed /tmp"
     LAST="^left /tmp\$"
@@ -165,9 +235,10 @@ else
 fi
 
 # The disk $IMG, started: the file server recovers it as it mounts it, and
-# what it leaves has to be a clean filesystem with the synced file in it.
-# What the server says about the orphans it frees goes to the screen, which
-# is kept: user space never reaches the serial line.
+# what it leaves has to be a clean filesystem with the synced file in it —
+# unless the second argument says it has none. What the server says about
+# the orphans it frees goes to the screen, which is kept: user space never
+# reaches the serial line.
 served() {
     cat > "$SCRIPT" <<KEYS
 expect 120 ^login:\$
@@ -185,8 +256,10 @@ KEYS
         echo "   NOT CLEAN AFTER THE FILE SERVER'S RECOVERY"
         STATUS=1
     fi
-    root_of
-    synced_file || STATUS=1
+    if [ "$2" != made ]; then
+        root_of
+        synced_file || STATUS=1
+    fi
 }
 echo "== the same disk, recovered by the file server instead:"
 served "$RUN/crash-2.ppm"
@@ -195,7 +268,12 @@ if grep -q committed "$PART.stops"; then
     IMG=$RUN/crash-journal.img
     served "$RUN/crash-3.ppm"
 elif [ "$STOPS" -gt 0 ]; then
-    echo "== no stop found a transaction committed and not yet in place: the file server's replay was not tried. Run it again, or with more stops."
+    echo "== no stop found a transaction committed and not yet in place: the file server's replay was not tried by a stop. Run it again, or with more stops."
+fi
+if [ "$BUILT" = 1 ]; then
+    echo "== a disk made with a transaction to replay over an orphan, recovered by the file server:"
+    IMG=$RUN/crash-built.img
+    served "$RUN/crash-4.ppm" made
 fi
 echo "== screens: $RUN/crash-1.ppm (before), $RUN/crash-2.ppm (after)"
 exit $STATUS
