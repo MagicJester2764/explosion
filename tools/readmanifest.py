@@ -28,6 +28,7 @@ TYPES = {
     6: "set_uid",
     8: "endpoint",
     9: "memobject",
+    10: "device_memory",
 }
 
 # Not a capability: a request to be scheduled in a band (PRIORITY_REQ in

@@ -109,6 +109,11 @@ tools/crash-test.sh                           # stop mid-write, recover, check
 tools/install-test.sh                         # install from the ISO; start the disk
 ```
 
+Every machine they start has QEMU's `edu` device in it, which nothing
+notices unless the image starts its driver: `start /usr/bin/edu` in
+`/etc/init.conf`, and then `dtest msi` has a device whose interrupt is a
+message of its own to ask about. (The driver is in the `tests` package.)
+
 Every one of them gives the machine one processor unless `SMP` says how
 many, and a change is tested on one and on four (`SMP=4 tools/…`): they
 find different mistakes. With one, nothing runs at the same time as

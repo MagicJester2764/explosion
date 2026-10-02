@@ -189,8 +189,8 @@ this system's own:
   not because a tool checks, but because the file server serving it holds
   it. `disks` shows who holds what.
 - **A package says what its programs may do.** Every program here carries
-  what it asks the system to allow it — ports, interrupts, a scheduling
-  band — and a spawner grants from that. `qpkg info NAME` reads it out:
+  what it asks the system to allow it — ports, interrupts, its device's
+  registers, a scheduling band — and a spawner grants from that. `qpkg info NAME` reads it out:
   what a package can do is known before it is installed. And a system
   installs another by copying itself: `qpkg strap` takes the packages from
   the running system, with the lists that say what they are.

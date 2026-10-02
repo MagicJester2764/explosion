@@ -13,6 +13,12 @@
 # machine where it cannot turn them on.
 # `SMP` is how many processors the machine has: one unless said otherwise.
 #
+# The machine also has QEMU's `edu` device in it: a device with nothing to
+# do but be driven, whose registers are memory at an address the firmware
+# chose and whose interrupt is a message of its own. Nothing notices it
+# unless the image starts its driver (`start /usr/bin/edu` in
+# `/etc/init.conf`), and then `dtest msi` has a device to ask about.
+#
 # Verification here is boot-in-QEMU: user-space `println!` goes to the
 # framebuffer and not to serial, so a screendump is the output and serial only
 # catches kernel faults. The text console's screen can be read back as text
@@ -62,6 +68,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -s
   -pflash "$RUN/OVMF_VARS.fd" \
   $DRIVES -display none \
   -device rtl8139,netdev=n -netdev user,id=n \
+  -device edu \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &
 echo $! > "$RUN/qemu.pid"
