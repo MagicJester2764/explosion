@@ -4,9 +4,10 @@
     ./echo-server.py [port]            # 7007 if not given
 
 QEMU's user network shows the host's loopback to the guest as 10.0.2.2, so a
-program on Quark reaches this at 10.0.2.2:<port>. boot-test.sh starts one for
-every run and stops it afterwards, which is what lets a test of the network
-server check that what it sent came back.
+program on Quark reaches this at 10.0.2.2:<port>. boot-test.sh starts one if
+none is listening and leaves it running — every run there is at once uses the
+one — which is what lets a test of the network server check that what it sent
+came back. Stop it by hand when there is nothing left to test.
 
 TCP connections are echoed until the client closes; datagrams are sent back to
 whoever sent them, a moment later.

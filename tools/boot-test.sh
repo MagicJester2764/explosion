@@ -62,9 +62,11 @@ cd "$TOP"
 cp ../bang/firmware-redist/ovmf/OVMF_VARS.fd "$RUN/OVMF_VARS.fd"
 # Something on the network to talk to: an echo server on this machine's
 # loopback, which the guest's user-mode network shows as 10.0.2.2:7007.
-[ -f "$RUN/echo.pid" ] && kill "$(cat "$RUN/echo.pid")" 2>/dev/null
-python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &
-echo $! > "$RUN/echo.pid"
+# One, for every run there is at once: started if nothing is listening —
+# one that finds the port taken ends by itself — and left running, in a
+# session of its own. A run that started one and stopped it when it ended
+# was stopping the one the run beside it was using: the port is one port.
+(setsid python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &)
 # -m 1G for the reason the Makefile gives: a toolkit-linked program is tens of
 # megabytes and is in memory twice while it is being started.
 qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m "${MEM:-1G}" \
@@ -83,8 +85,7 @@ echo $! > "$RUN/qemu.pid"
 status=0
 python3 "$HERE/drive-qemu.py" "$RUN/qmp.sock" "$1" || status=1
 kill "$(cat "$RUN/qemu.pid")" 2>/dev/null || true
-kill "$(cat "$RUN/echo.pid")" 2>/dev/null || true
-rm -f "$RUN/qemu.pid" "$RUN/echo.pid"
+rm -f "$RUN/qemu.pid"
 
 if grep -aq "KFAULT\|PANIC" "$RUN/serial.log" 2>/dev/null; then
     echo "KERNEL FAULT:"

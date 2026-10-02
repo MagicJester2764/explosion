@@ -109,6 +109,14 @@ tools/crash-test.sh                           # stop mid-write, recover, check
 tools/install-test.sh                         # install from the ISO; start the disk
 ```
 
+Every run has an echo server to talk to, on port 7007 of this machine, and
+there is one of it however many runs there are: a run starts it if nothing
+is listening and nobody stops it. It was each run's own, started and
+stopped with the run, and two runs at once had one between them — the
+first's, which took it away from the second when it ended, and the second's
+network test failed. Four images tested together did that to each other
+according to which finished first.
+
 Every machine they start has QEMU's `edu` device in it, which nothing
 notices unless the image starts its driver: `start /usr/bin/edu` in
 `/etc/init.conf`, and then `dtest msi` has a device whose interrupt is a
