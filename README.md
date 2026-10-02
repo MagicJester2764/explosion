@@ -171,10 +171,12 @@ service requests made from a seed.
 
 ## Packages
 
-`tools/qpkg` builds, inspects and installs packages. A package is a gzipped tar
-holding `PKGINFO` and a `files/` tree rooted at the target's filesystem root —
-nothing exotic; the point is that installing a program is a defined operation
-with metadata attached rather than a `cp` in a Makefile.
+Every file in an image belongs to a package, and each package is a list in
+the image: `/var/lib/qpkg/NAME` says what the package is, which *set* it is
+in, every file it owns with its length and a checksum, and what each of its
+programs asks to be allowed. `packages.conf` says which files are whose, and
+`tools/stage-packages.py` writes the lists while staging. `system` comes last
+there and takes what nothing else claimed, so every file is somebody's.
 
 ```bash
 cd stage
@@ -187,21 +189,15 @@ cd stage
 spawner finds it at runtime, so what a package will be allowed to do is
 inspectable before it is installed rather than discovered when it runs:
 
-```
-capabilities requested:
-  boot/DISK.ELF:
-    band driver
-    ioport 0x1F0-0x1F7
-    ioport 0x3F6-0x3F6
-    irq 14
-  boot/KEYBOARD.ELF:
-    band driver
-    ioport 0x60-0x64
-    irq 1
-    irq 12
-```
+`qpkg files`, `owner` and `verify` are what they say — `verify` reads every
+file back against its checksum — and `qpkg strap ROOT SET...` copies the
+packages of those sets into another root. `base` is a system that starts;
+`desktop` and `tests` are in an image built with the clients and the suites.
 
-A program that requests nothing shows nothing, and gets nothing.
+What a package's programs may do is read out of the programs themselves,
+the way a spawner reads it when it starts one (`tools/readmanifest.py`), so
+it is known before the package is installed rather than discovered when it
+runs. A program that asks for nothing shows nothing, and gets nothing.
 
 ## Disclaimer
 

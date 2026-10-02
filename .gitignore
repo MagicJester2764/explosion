@@ -15,3 +15,6 @@ clients/toytoolkit/
 
 # What Python leaves beside the tools it imports.
 __pycache__/
+
+# The programs here are built in place.
+programs/*/target/

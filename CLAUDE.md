@@ -49,8 +49,12 @@ make run-iso   # boot it, with DISK=<image> attached to install onto
 - **An image built without a variable has nothing of that variable's in it.**
   `COREUTILS`, `WAYLAND_CLIENTS`, `TEST_SUITES` and `ROOT_OVERLAYS` each stage
   somebody else's build, and each stager records what it put in the stage and
-  takes it back out when it runs again without. So the same command line has
-  to be given every time, or the image quietly loses its fonts.
+  takes it back out when it runs again without (`tools/stage-forget.sh` for
+  the clients and the suites, whose records are `.clients` and `.suites` at
+  the top of the stage). So the same command line has to be given every
+  time, or the image quietly loses its fonts. The suites were the one that
+  did not for a long time, and it showed when a package list was first made
+  of a stage: the "default" disc had every test in it.
 - **The ISO's root is a boot module.** `live.img` is an ext2 image of the
   stage, put on the EFI partition as `\drivers\LIVE.IMG`; Bang loads every
   file there, `init` starts `ramdisk` on that one with the right to map

@@ -24,6 +24,13 @@ OVMF_PATH ?= $(BANG_DIR)/firmware-redist/ovmf
 
 STAGE := stage
 
+# What every package in an image built here says its version is.
+VERSION := 0.21
+
+# ExplOSion's own programs: its package tool, so far. They are built
+# against ../quarkutils' runtime, as that tree's programs are.
+PROGRAMS := qpkg
+
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
 # nearly full without them, and 64 MiB filled up the moment a program linked
 # glib statically -- one of those is four megabytes on its own.
@@ -93,10 +100,17 @@ all: hd
 # other; this is the only place that knows there are two.
 stage: FORCE
 	@mkdir -p $(STAGE)
+	@# What the last stage took from WAYLAND_CLIENTS and TEST_SUITES, back
+	@# out: this one may have been asked for neither.
+	@./tools/stage-forget.sh $(STAGE) .clients .suites
 	$(MAKE) -C $(QUARK_DIR) install DESTDIR=$(CURDIR)/$(STAGE)
 	$(MAKE) -C $(QUARKUTILS_DIR) install DESTDIR=$(CURDIR)/$(STAGE) REQUIRE_ABI=1
 	$(MAKE) -C $(BANG_DIR) build
 	@cp $(BANG_DIR)/BOOTX64.EFI $(STAGE)/BOOTX64.EFI
+	@for p in $(PROGRAMS); do \
+		(cd programs/$$p && cargo build --release) || exit 1; \
+		cp programs/$$p/target/x86_64-unknown-none/release/$$p $(STAGE)/usr/bin/$$p; \
+	done
 	@mkdir -p $(STAGE)/home/root $(STAGE)/bin
 	@# `/bin/sh` is where a program that starts a shell looks for one —
 	@# weston-terminal execs `$$SHELL` or this — and nothing in Quark's tree
@@ -113,6 +127,7 @@ stage: FORCE
 			[ -f "$$f" ] && [ -x "$$f" ] || continue; \
 			b=`basename $$f`; \
 			cp "$$f" $(STAGE)/usr/bin/$$b; \
+			echo "usr/bin/$$b" >> $(STAGE)/.clients; \
 			x86_64-quark-strip $(STAGE)/usr/bin/$$b 2>/dev/null || true; \
 			n=$$((n + 1)); \
 		done; \
@@ -120,6 +135,8 @@ stage: FORCE
 		if [ -d "$(WAYLAND_CLIENTS)/share" ]; then \
 			mkdir -p $(STAGE)/usr/share; \
 			cp -r $(WAYLAND_CLIENTS)/share/* $(STAGE)/usr/share/; \
+			(cd $(WAYLAND_CLIENTS) && find share \( -type f -o -type l \)) \
+				| sed 's|^|usr/|' >> $(STAGE)/.clients; \
 			echo "wayland: staged the data its clients read"; \
 		fi; \
 	fi
@@ -131,9 +148,11 @@ stage: FORCE
 			[ -f "$$f" ] || continue; \
 			b=`basename $$f`; \
 			case "$$b" in \
-			*.tests) cp "$$f" $(STAGE)/etc/$$b ;; \
+			*.tests) cp "$$f" $(STAGE)/etc/$$b; \
+			   echo "etc/$$b" >> $(STAGE)/.suites ;; \
 			*) [ -x "$$f" ] || continue; \
 			   cp "$$f" $(STAGE)/usr/bin/$$b; \
+			   echo "usr/bin/$$b" >> $(STAGE)/.suites; \
 			   x86_64-quark-strip $(STAGE)/usr/bin/$$b 2>/dev/null || true; \
 			   n=$$((n + 1)) ;; \
 			esac; \
@@ -144,8 +163,10 @@ stage: FORCE
 	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
-	@# Last, since it lists every program the stage now has.
+	@# Nearly last, since it lists every program the stage now has.
 	@./tools/gen-hostile-tests.sh $(STAGE)
+	@# And last: whose every file is.
+	@./tools/stage-packages.py $(STAGE) packages.conf $(VERSION)
 	@echo "staged into $(STAGE)"
 
 # ---------------------------------------------------------------------------

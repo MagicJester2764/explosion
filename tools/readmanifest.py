@@ -68,6 +68,29 @@ def find(data):
     return None
 
 
+def find_all(data):
+    """Every request in every manifest block of an image.
+
+    An image is linked from several objects and any of them may declare
+    what it needs — a C library does — so what a program is granted is the
+    sum of its blocks, which is how a spawner reads it.
+    """
+    reqs = []
+    off = 0
+    while off + HDR <= len(data):
+        if data[off:off + 8] == MAGIC:
+            version, count = struct.unpack_from("<QQ", data, off + 8)
+            if version == VERSION and off + HDR + count * REQ <= len(data):
+                reqs += [
+                    struct.unpack_from("<QQQ", data, off + HDR + i * REQ)
+                    for i in range(count)
+                ]
+                off += HDR + count * REQ
+                continue
+        off += 8
+    return reqs
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__.strip(), file=sys.stderr)
