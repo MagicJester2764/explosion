@@ -26,7 +26,7 @@ OVMF_PATH ?= $(BANG_DIR)/firmware-redist/ovmf
 STAGE := stage
 
 # What every package in an image built here says its version is.
-VERSION := 0.21
+VERSION := 0.22
 
 # ExplOSion's own programs: its package tool, what puts the boot loader on a
 # new system, the reader of the installation guide, and the two that say who

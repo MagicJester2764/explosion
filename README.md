@@ -9,9 +9,9 @@ other people's software is built for it.
 ../bang             the UEFI bootloader
 ../quark-toolchain  the cross compilers, for the ports
 ./                  this: staging, image assembly, QEMU targets, every port
-                    of somebody else's software, and the three programs that
-                    make a distribution of it: its packages, its installer
-                    and its guide
+                    of somebody else's software, and the programs that make
+                    a distribution of it: its packages, its installer, its
+                    guide, and who its users are
 ```
 
 The dependency runs one way. ExplOSion reaches down to the three trees beside
@@ -165,13 +165,17 @@ mkfs.ext4 /dev/disk0p2
 mount /dev/disk0p2 /mnt
 mount --mkdir /dev/disk0p1 /mnt/boot
 qpkg strap /mnt base
+passwd --root /mnt root
+user --root /mnt add ada
+passwd --root /mnt ada
+user --root /mnt ada may power become
 bang-install /mnt
 umount /mnt/boot
 umount /mnt
 shutdown -r
 ```
 
-What is under those commands is not Linux's, and three things about it are
+What is under those commands is not Linux's, and four things about it are
 this system's own:
 
 - **A mount is a server.** `mount` starts a file server for the partition
@@ -189,6 +193,9 @@ this system's own:
   what a package can do is known before it is installed. And a system
   installs another by copying itself: `qpkg strap` takes the packages from
   the running system, with the lists that say what they are.
+- **An account is what it may do.** See *Users*, below: the user the guide
+  makes can turn the machine off and run a command as root because the
+  fourth of those lines says so, and for no other reason.
 
 To try it by hand, give the disc a blank disk and follow the guide; the disk
 then starts by itself:
@@ -200,9 +207,66 @@ make run-disk DISK=disk.img     # what was installed
 ```
 
 `tools/install-test.sh` does the same without anybody at the keyboard: it
-types the guide's own commands at the disc, with a blank disk attached,
-restarts into the disk, and has this machine's `sfdisk`, `fsck.fat` and
-`e2fsck` look at what was made.
+types the guide's own commands at the disc, with a blank disk attached, and
+a password wherever one is asked for; restarts into the disk; logs in as the
+user the guide made — not with a wrong password, and with the right one —
+and holds that user to being one; and has this machine's `sfdisk`,
+`fsck.fat` and `e2fsck` look at what was made.
+
+## Users
+
+There is more than one user, and each has a password (`passwd`). Whose a
+file is, and who may read it, is Unix's: owners, groups and modes, kept by
+the file server. What is this system's own is the rest of what "root" means
+anywhere else.
+
+On Unix, a program run by root may do anything, and a program that needs to
+do one privileged thing is marked to run as root whoever starts it. Neither
+exists here. A program on Quark may do what it holds a *capability* for, and
+it holds what whoever started it handed over — so what a user's programs can
+do is decided once, when the session begins, by what the session is handed.
+`/etc/rights` says what that is, account by account, and `user` edits it:
+
+```
+~$ user
+NAME             ID  HOME                 MAY
+root              0  /home/root           everything
+ada            1000  /home/ada            power, become
+~$ user ada may tasks
+ada may: power, tasks, become. From their next login.
+~$ user ada may not power
+```
+
+| right | what a session of the account is handed |
+|-------|------------------------------------------|
+| `power` | the ports that turn the machine off and restart it |
+| `tasks` | authority over every task: ending anybody's program |
+| `become` | nothing at login; it lets `as` take the account's own password |
+| `all` | all of it, and the right to say who a task is. Root's, unless a line says otherwise |
+
+A program that needs a right its account has not got says so — `shutdown:
+this account may not turn the machine off` — where it used to do nothing.
+
+`as USER COMMAND` runs one command as somebody else: `as root mount
+/dev/disk0p1 /mnt`. An account that may `become` is asked for its *own*
+password; any other is asked for USER's. There is no program anywhere on the
+system that runs as root because of what file it is: `as`, `su`, `login` and
+`passwd` hold nothing, and ask the one server that may say who a task is
+(`auth`, in `../quarkutils`), which checks the password itself. `qpkg info
+boot` shows what that server holds, the way it shows any program's.
+
+What somebody types is theirs too. Each login is a session, a terminal is
+the session's that has it, and a program somebody left running when they
+logged out cannot read what the next person types or open the terminal by
+its name. That is true of a terminal — which an installed system's sessions
+are on — and not of the plain console an image built with no `init.conf`
+starts on, which hands a typed line to whoever asks.
+
+`user add NAME` and `user remove NAME` make and take away accounts; the
+Unix-named tools (`useradd`, `groupadd`, `gpasswd`) are there too, for
+groups and for the options `user` does not have. All of them take `--root
+DIR` first, to work on a system mounted at DIR, which is how the guide makes
+the first user of one.
 
 ## The ports
 
@@ -253,15 +317,16 @@ there and takes what nothing else claimed, so every file is somebody's.
 ```
 ~$ qpkg
 PACKAGE      SET       VERSION   FILES       SIZE
-boot         base      0.21          7    1.8 MiB
-fstools      base      0.21          6    3.6 MiB
-quark        base      0.21          2     97 KiB
-system       base      0.21         28    1.3 MiB
+boot         base      0.22          7    1.8 MiB
+fstools      base      0.22          6    3.6 MiB
+quark        base      0.22          2    102 KiB
+system       base      0.22         40    1.7 MiB
 ~$ qpkg info boot
-boot 0.21
+boot 0.22
   What the firmware starts: Bang, the kernel, and the services a system runs before it has a root.
   set base, 7 files, 1.8 MiB
 What its programs ask to be allowed:
+  /usr/lib/explosion/boot/drivers/boot.img:auth band server, set_uid, task_mgmt any, phys_alloc 64 pages, ioport 0x604-0x604, ioport 0xB004-0xB004, ioport 0xCF9-0xCF9
   /usr/lib/explosion/boot/drivers/boot.img:disk band driver, ioport 0x1F0-0x1F7, ioport 0x3F6-0x3F6, irq 14
   /usr/lib/explosion/boot/drivers/boot.img:keyboard band driver, ioport 0x60-0x64, irq 1, irq 12
   /usr/lib/explosion/boot/drivers/boot.img:net band driver, ioport 0x0-0xFFFF, irq any, phys_alloc 64 pages
@@ -269,11 +334,15 @@ What its programs ask to be allowed:
 ```
 
 (The network driver asks for every port there is and any interrupt. This is
-where that shows.)
+where that shows. And `auth` holds everything a session may be handed, since
+it is what hands it: the one program with `set_uid`.)
 
 `qpkg files`, `owner` and `verify` are what they say — `verify` reads every
 file back against its checksum — and `qpkg strap ROOT SET...` copies the
-packages of those sets into another root. `base` is a system that starts;
+packages of those sets into another root. A few files are the system's
+owner's to change — the accounts, the passwords, what each account may do,
+what a session starts (`yours`, in `packages.conf`) — and `verify` asks only
+that those are there, and says how many have been changed. `base` is a system that starts;
 `desktop` and `tests` are in an image built with the clients and the suites.
 
 What a package's programs may do is read out of the programs themselves,

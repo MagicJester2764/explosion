@@ -161,6 +161,10 @@ if an `expect` gave up or the kernel faulted.
   there that is not a command to type breaks the test — say an alternative
   in the prose. It takes the disc out at `shutdown -r`, as the guide tells a
   person to, and then boots the disk alone.
+- **And its passwords are the test's.** A `passwd` line there is answered:
+  the test types a password at `New password:` and `Again:`, and whoever
+  was given one logs in with it afterwards. A guide that stops giving root
+  a password, or stops making a user with one, fails before anything boots.
 - **`DRIVE_TIMES=1`** has each `expect` say how long it waited, which is how
   to find out where an install spends its time.
 - **Keep `RUNDIR` short.** The emulator's control socket is in it, and a
@@ -171,6 +175,46 @@ What to run on the machine: `dtest` (the kernel, through its ABI),
 `tools/build-ctests.sh` there builds the suite directory) and the ports' lists
 in `/etc`, `qfuzz <rounds> <seed>`. After anything that writes to the disk, `check-rootfs.sh` — on ext2
 *and* ext4, since they share less code than it looks.
+
+## Users
+
+Who the users are, and what a user may read, is `../quarkutils`' — the
+accounts, the passwords, the server that checks them (`auth`), the file
+server's rules. Read its `CLAUDE.md` first. What is here is what this
+distribution makes of it:
+
+- **`etc/rights` is this distribution's file.** `auth` hands a session what
+  its account's line there says, and with no such file gives root everything
+  and nobody else anything. Staging copies it into every image; `user NAME
+  may ...` (`programs/user`) rewrites it, and `as` (`programs/as`) is what
+  the `become` right is for. A right is a capability handed over at login:
+  nothing here checks a user id to decide what a program may do, and a new
+  right is a new thing for `auth` to hand over, in `../quarkutils`.
+- **The account files are the owner's to change.** `packages.conf` says so
+  (`yours`), the lists mark them `y`, and `qpkg verify` asks only that they
+  are there. Without it the first password set on an installed system made
+  the system "not as built". A file that is edited in the ordinary life of
+  a system belongs on that line.
+- **`qpkg strap` copies who the users are**, with their modes: the passwords
+  are 0600 on the system installed because they are 0600 on the one
+  installing. The disc has root and no password; the guide gives the new
+  system both before it is restarted into.
+- **A disk image's EFI partition is FAT32**, said to `tools/make-esp.sh` by
+  `FAT32=1`. Left to choose, `mformat` makes anything under half a gigabyte
+  FAT16, which Quark does not read — and for a long time the file server
+  mounted one anyway and failed every read, so an image built here could not
+  look at the partition it had started from. The disc's is left as `mformat`
+  makes it: nothing mounts a disc's.
+- **More than one user means sessions on a terminal.** A terminal is its
+  session's and each login is a session, so what one user leaves running
+  cannot read what the next types; the plain console has no notion of whose
+  it is. The disc and what it installs say `session /usr/bin/getty`
+  (`live/etc/init.conf`); an image built here with no overlay starts on the
+  console, which keeps both paths under test and is not somewhere to put a
+  second user.
+- **Root's home is 0700**, in an image (`tools/populate-ext.sh`) and in what
+  `qpkg strap` makes (`dir 0700 home/root`). Both, or one of the two kinds
+  of system has a home anybody can read.
 
 ## The toolchain
 
