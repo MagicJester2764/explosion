@@ -18,10 +18,10 @@
 # Then the disk is booted with no ISO, and the system on it is asked what it
 # is: its root, its packages, each file's checksum against what was built.
 # The user the guide made logs in to it — with the password, and not with
-# another — and is held to being a user: root's files do not open, and what
-# the account was allowed to do, it does. And this machine's own tools look
-# at what the guest's tools made — the partition table, the FAT filesystem
-# and the ext4 one.
+# another — and is held to being a user: root's files do not open, nor does
+# a second user's home, and what the account was allowed to do, it does.
+# And this machine's own tools look at what the guest's tools made — the
+# partition table, the FAT filesystem and the ext4 one.
 #
 # RUNDIR is where the disk, the logs and the transcripts go; they are kept.
 # (Keep it short: the emulator's control socket is in it, and a socket's
@@ -119,6 +119,10 @@ first = log_in("root", 240) + [
     "saw ^/usr/bin/ls is from system$",
     r"type user\n", f"expect 60 {prompt}",
     f"saw ^{user} +1000 +/home/{user} +power, become$",
+    # A second user, on the running system this time: its home is to be its
+    # own, and not the first user's any more than root's is.
+    r"type user add second\n", f"expect 60 {prompt}",
+    "saw ^second is user 1001, with a home at /home/second\\.$",
     r"type exit\n",
     # The user the guide made: not with a wrong password, and with the
     # right one.
@@ -135,7 +139,9 @@ first = log_in("root", 240) + [
     r"type cat /etc/shadow\n", f"expect 60 {prompt}",
     "saw ^cat: /etc/shadow: permission denied$",
     r"type ls /home/root\n", f"expect 60 {prompt}",
-    "saw ^ls: .*permission denied",
+    "saw ^ls: /home/root: permission denied$",
+    r"type ls /home/second\n", f"expect 60 {prompt}",
+    "saw ^ls: /home/second: permission denied$",
     r"type mount /dev/disk0p1 /mnt\n", f"expect 60 {prompt}",
     "saw ^mount: only root mounts a filesystem$",
     # And what the account may do, it does: a command as root, on its own
