@@ -16,6 +16,11 @@
 # application at all — which is how it would reach a Windows boot manager —
 # and LINUX_KERNEL (with INITRD beside it), to show the handover protocol
 # working.
+#
+# With FAT32 set it is FAT32 whatever its size, which is what a disk's EFI
+# system partition is meant to be and the one FAT this system reads: left to
+# choose, mformat makes anything under half a gigabyte FAT16, and a system
+# built here could not mount the partition it had started from.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 IMG=${1:?usage: make-esp.sh <image> <size-kb> <stage> <boot.img> [<file>:<NAME>...]}
@@ -25,7 +30,7 @@ BOOT_IMG=${4:?boot.img}
 shift 4
 
 dd if=/dev/zero of="$IMG" bs=1k count="$SIZE_KB" status=none
-mformat -i "$IMG" ::
+mformat ${FAT32:+-F} -i "$IMG" ::
 mmd -i "$IMG" ::/EFI
 mmd -i "$IMG" ::/EFI/BOOT
 mcopy -i "$IMG" "$STAGE/BOOTX64.EFI" ::/EFI/BOOT

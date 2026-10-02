@@ -236,7 +236,7 @@ ESP_KB   := $(shell expr $(ROOTFS_SIZE_KB) + 3072)
 ESP_ENV   = SHELL_EFI="$(SHELL_EFI)" LINUX_KERNEL="$(LINUX_KERNEL)" INITRD="initrd.img"
 
 fat.img: stage $(BOOT_IMG)
-	$(ESP_ENV) ./tools/make-esp.sh fat.img $(ESP_KB) $(STAGE) $(BOOT_IMG)
+	FAT32=1 $(ESP_ENV) ./tools/make-esp.sh fat.img $(ESP_KB) $(STAGE) $(BOOT_IMG)
 
 # ---------------------------------------------------------------------------
 # Disk images
