@@ -31,6 +31,7 @@ TYPES = {
     10: "device_memory",
     11: "clock",
     12: "power",
+    13: "swap",
 }
 
 # Not a capability: a request to be scheduled in a band (PRIORITY_REQ in

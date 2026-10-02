@@ -149,6 +149,23 @@ session /usr/bin/getty
 Without one the console draws the nearest ASCII to each character it has no
 picture of, and a box where there is none.
 
+And how a machine gets somewhere to put memory it has run out of room for. A
+third kind of line starts a program and leaves it running, and `swapd` is one
+to start: it keeps pages the kernel takes from programs that are not using
+them, in a file, and gives them back when they are touched.
+
+```
+start /usr/bin/swapd /var/swap 64
+```
+
+is a file of up to sixty-four megabytes, made empty when the machine starts
+and as long as the most that was ever written out at once. With it, a
+program that wants more memory than the machine has waits for some to be
+written out; without it, it is ended. `free` says how much memory there is,
+how much is written out, and how much has gone out and come back since the
+machine was started. It is not started unless a line says so: an
+installation disc runs from memory, and a file there is memory too.
+
 ## Installing
 
 `make iso` makes the installation disc, and `docs/install.md` is how it is
@@ -305,7 +322,11 @@ server: it has found what reading the code did not.
 
 On the machine itself, `dtest` checks the kernel through its ABI, `runtests
 /etc/<suite>.tests` runs a list of test programs, and `qfuzz` sends every
-service requests made from a seed.
+service requests made from a seed. Two of `dtest`'s sections need something
+the image has to start: `dtest msi` the driver for the device every test
+machine is given (`start /usr/bin/edu`), and `dtest pressure` somewhere to
+write memory out to (`start /usr/bin/swapd /var/swap 16`). Without them each
+says so and checks what it can.
 
 ## Packages
 

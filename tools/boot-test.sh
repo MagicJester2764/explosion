@@ -23,6 +23,8 @@
 # chose and whose interrupt is a message of its own. Nothing notices it
 # unless the image starts its driver (`start /usr/bin/edu` in
 # `/etc/init.conf`), and then `dtest msi` has a device to ask about.
+# `dtest pressure` wants the image to have started something too: `swapd`,
+# with a file to write memory out to (`start /usr/bin/swapd /var/swap 16`).
 #
 # Verification here is boot-in-QEMU: user-space `println!` goes to the
 # framebuffer and not to serial, so a screendump is the output and serial only
