@@ -88,6 +88,32 @@ is what the system is checked with: name them after `base`, as in
 with the lists that say what they are. `qpkg info NAME` says what a
 package's programs ask to be allowed to do, before or after.
 
+## Say who will use it
+
+The new system has one user, `root`, and root has no password: anybody who
+sits down at it is root. Give root a password, and make a user of your own
+— `ada` here; use your name:
+
+```
+passwd --root /mnt root
+user --root /mnt add ada
+passwd --root /mnt ada
+user --root /mnt ada may power become
+user --root /mnt
+```
+
+`passwd` asks for a password twice and shows neither. `user add` makes the
+account and its home, `/home/ada`, which is ada's and nobody else's to look
+in; until it has a password nobody can log in to it.
+
+What an account may *do* is not a matter of being root or not. It is said
+account by account, and the fourth command says it: `power` lets ada turn
+the machine off and restart it, and `become` lets ada run a command as
+another user — `as root mount /dev/disk0p1 /mnt` — on ada's own password.
+There is also `tasks`, to end anybody's programs. The last command shows
+who there is and what each may do. `user ada may not become` takes a right
+back, and all of it works on a running system without `--root`.
+
 ## Install the boot loader
 
 ```
@@ -110,7 +136,7 @@ shutdown -r
 
 Remove the installation disc when the machine restarts — or `shutdown`
 without `-r`, remove it, and turn the machine on. It starts from the disk:
-log in as `root`. There is no password yet, and no other user.
+log in as the user you made, with the password you gave.
 
 ## When something goes wrong
 
@@ -123,5 +149,10 @@ log in as `root`. There is no password yet, and no other user.
 - `mkfs.ext4` says *Resource busy*: the same.
 - The machine starts the disc again instead of the disk: take the disc out,
   or choose the disk in the firmware's boot menu.
+- `login` says *Login incorrect* to a password you are sure of: start the
+  disc again, `mount /dev/disk0p2 /mnt`, and `passwd --root /mnt ada`.
+- A command says *this account may not*: it needs a right the account has
+  not got. `as root COMMAND` runs it as root, if the account may `become`;
+  `user` shows what each account may do.
 - To start over, start over: `umount` everything and begin at
   *Partition the disk*. Nothing is kept anywhere but on the disk.
