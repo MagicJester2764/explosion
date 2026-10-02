@@ -30,18 +30,24 @@ Operations, one per line:
     hmp <command>        a monitor command, its output printed: `hmp info
                          registers` says where a guest that stopped
                          answering is spending its time
+    run <command>        a command on this machine, between two steps of the
+                         guest's: with `hmp stop` before it and `hmp cont`
+                         after, the guest's disk is looked at as it stands
+                         while the guest is held where it was. One that
+                         fails, fails the run.
     quit                 stop the guest
 
 The timing lives here rather than in the shell that calls it: a foreground
 sleep in a tool call is blocked by the harness.
 
-Exits 1 if an `expect` gave up, a `saw` saw nothing, or the machine was
-still on when `off` stopped waiting.
+Exits 1 if an `expect` gave up, a `saw` saw nothing, a `run` failed, or the
+machine was still on when `off` stopped waiting.
 """
 import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import time
 
@@ -250,6 +256,11 @@ for raw in open(script_path):
         reply = cmd("human-monitor-command", **{"command-line": arg})
         print("hmp", arg, flush=True)
         print((reply or {}).get("return", reply), flush=True)
+    elif op == "run":
+        done = subprocess.run(arg, shell=True)
+        if done.returncode != 0:
+            print("run: exit", done.returncode, "from", arg, flush=True)
+            FAILED = True
     elif op == "quit":
         cmd("quit")
 print("done", flush=True)

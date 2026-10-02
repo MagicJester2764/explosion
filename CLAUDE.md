@@ -108,6 +108,23 @@ tools/crash-test.sh                           # stop mid-write, recover, check
 tools/install-test.sh                         # install from the ISO; start the disk
 ```
 
+`crash-test.sh` stops the machine with three things on the disk — a removed
+file a program still holds, a file written and synced, and, on ext4, a
+directory being changed as it stops — and recovers the disk twice: with
+`e2fsck`, and by booting it. The synced file has to be whole both times. On
+ext4 it first stops the machine twenty-four times without ending it (`hmp
+stop`, a `run` line that recovers a copy of the disk, `hmp cont`), says how
+many stops found a transaction committed to the journal and not yet in
+place, and boots the first such disk, so that the file server's own replay
+is tried and not only `e2fsck`'s.
+
+- **One stop is not a crash test.** It finds the disk between transactions
+  nine times in ten. Many stops found, the first time they were tried, that
+  a superblock written as two sectors could be caught between them.
+- **Run it on ext2 and on ext4** after anything that changes how the file
+  server or the disk driver writes, and read the count: a run in which no
+  stop found a committed transaction has not tried replay, and says so.
+
 A keys file is one operation per line (`tools/drive-qemu.py` has the list):
 `sleep`, `type`, `key`, `move dx dy [n]`, `click`, `press`, `release`, `wheel`,
 `shot`, `expect`, `text`, `transcript`, `hmp`, `quit`. `boot-test.sh` exits 1
