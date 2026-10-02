@@ -48,6 +48,8 @@ trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
     # and only a file's owner's to remove from.
     printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\nmkdir mnt\n'
     printf 'set_inode_field tmp mode 041777\n'
+    # Root's home is root's: nobody else's to look in.
+    printf 'set_inode_field home/root mode 040700\n'
     find bin usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
     find bin usr etc var -type l 2>/dev/null | sort | while read -r l; do
         printf 'symlink %s %s\n' "$l" "$(readlink "$l")"
