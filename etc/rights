@@ -1,0 +1,13 @@
+# What each account's sessions may do besides being themselves.
+#
+# A line is a name and its rights:
+#   power    turn the machine off, and restart it
+#   tasks    end any program, whoever's
+#   become   run a command as another user with one's own password (`as`)
+#   all      everything, the right to say who anybody is among it
+#
+# An account with no line has none of them, unless it is root, which has
+# them all. `user NAME may RIGHT...` and `user NAME may not RIGHT...` write
+# this file; `user` shows it. A right is handed to a session as it begins,
+# so a change is there from the next login.
+root all

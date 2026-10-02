@@ -29,9 +29,10 @@ STAGE := stage
 VERSION := 0.21
 
 # ExplOSion's own programs: its package tool, what puts the boot loader on a
-# new system, and the reader of the installation guide. They are built
-# against ../quarkutils' runtime, as that tree's programs are.
-PROGRAMS := qpkg bang-install guide
+# new system, the reader of the installation guide, and the two that say who
+# uses the system and what each of them may do. They are built against
+# ../quarkutils' runtime, as that tree's programs are.
+PROGRAMS := qpkg bang-install guide user as
 
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
 # nearly full without them, and 64 MiB filled up the moment a program linked
@@ -129,6 +130,9 @@ stage: FORCE
 	@cp $(STAGE)/BOOTX64.EFI $(STAGE)/kernel.bin bang.cfg $(STAGE)/usr/lib/explosion/boot/
 	@cp $(STAGE)/drivers/* $(BOOT_IMG) $(STAGE)/usr/lib/explosion/boot/drivers/
 	@cp docs/install.md $(STAGE)/usr/share/doc/explosion/install.md
+	@# What each account may do: a file of this distribution's, which the
+	@# server that says who somebody is reads if it is there.
+	@cp etc/rights $(STAGE)/etc/rights
 	@# `/bin/sh` is where a program that starts a shell looks for one —
 	@# weston-terminal execs `$$SHELL` or this — and nothing in Quark's tree
 	@# decides where a distribution puts its shell. A copy rather than a link,
