@@ -11,6 +11,7 @@
 # `CPU` is the processor to emulate: `max` unless said otherwise, which has SMEP
 # and SMAP. `CPU=qemu64` has neither, and is how the kernel is tried on a
 # machine where it cannot turn them on.
+# `SMP` is how many processors the machine has: one unless said otherwise.
 #
 # Verification here is boot-in-QEMU: user-space `println!` goes to the
 # framebuffer and not to serial, so a screendump is the output and serial only
@@ -55,7 +56,7 @@ python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &
 echo $! > "$RUN/echo.pid"
 # -m 1G for the reason the Makefile gives: a toolkit-linked program is tens of
 # megabytes and is in memory twice while it is being started.
-qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -m 1G \
+qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m 1G \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
