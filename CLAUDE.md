@@ -114,6 +114,14 @@ notices unless the image starts its driver: `start /usr/bin/edu` in
 `/etc/init.conf`, and then `dtest msi` has a device whose interrupt is a
 message of its own to ask about. (The driver is in the `tests` package.)
 
+Every one of them gives the machine a gigabyte of memory unless `MEM` says
+how much. `MEM=6G` is a machine with memory above four gigabytes, and it is
+not the same machine made bigger: the firmware loads the bootloader above
+the line, which is how Bang came to hand the kernel half an address; the
+kernel's first map of memory ends there; and a network card is told where
+its buffers are in thirty-two bits. A change to the bootloader, to the
+kernel's memory or to a driver that does DMA is tried on one.
+
 Every one of them gives the machine one processor unless `SMP` says how
 many, and a change is tested on one and on four (`SMP=4 tools/…`): they
 find different mistakes. With one, nothing runs at the same time as

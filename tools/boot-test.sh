@@ -12,6 +12,11 @@
 # and SMAP. `CPU=qemu64` has neither, and is how the kernel is tried on a
 # machine where it cannot turn them on.
 # `SMP` is how many processors the machine has: one unless said otherwise.
+# `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
+# machine with memory above four gigabytes, which is a different machine to
+# start on: the firmware loads the bootloader up there, the kernel has more
+# to map than its first map holds, and a device that is told an address in
+# thirty-two bits has to be given memory it can reach.
 #
 # The machine also has QEMU's `edu` device in it: a device with nothing to
 # do but be driven, whose registers are memory at an address the firmware
@@ -62,7 +67,7 @@ python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &
 echo $! > "$RUN/echo.pid"
 # -m 1G for the reason the Makefile gives: a toolkit-linked program is tens of
 # megabytes and is in memory twice while it is being started.
-qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m 1G \
+qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m "${MEM:-1G}" \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
