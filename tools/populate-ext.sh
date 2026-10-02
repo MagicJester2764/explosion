@@ -43,8 +43,11 @@ OUT=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
 {
-    # /dev is the VFS's, but listing / should show it.
-    printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\n'
+    # /dev is the VFS's, but listing / should show it. /mnt is where
+    # something is mounted for a while, and /tmp is anybody's to write in
+    # and only a file's owner's to remove from.
+    printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\nmkdir mnt\n'
+    printf 'set_inode_field tmp mode 041777\n'
     find bin usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
     find bin usr etc var -type l 2>/dev/null | sort | while read -r l; do
         printf 'symlink %s %s\n' "$l" "$(readlink "$l")"

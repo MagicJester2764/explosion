@@ -197,10 +197,15 @@ for raw in open(script_path):
         print("shot", arg, flush=True)
     elif op == "expect":
         seconds, _, pattern = arg.partition(" ")
-        deadline = time.time() + float(seconds)
+        began = time.time()
+        deadline = began + float(seconds)
         while True:
             lines = screen()
             if lines and re.search(pattern, lines[-1]):
+                # How long each step took, for whoever is asking where the
+                # time went: DRIVE_TIMES=1.
+                if os.environ.get("DRIVE_TIMES"):
+                    print("waited %.1f s for %s" % (time.time() - began, pattern), flush=True)
                 break
             if time.time() >= deadline:
                 print("expect: gave up after", seconds, "s waiting for", pattern, flush=True)

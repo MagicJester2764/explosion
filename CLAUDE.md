@@ -10,7 +10,8 @@ repos/
   quarkutils/  everything that runs on it
   bang/        the UEFI bootloader
   quark-toolchain/  the cross compilers every C program here is built with
-  explosion/   this repo — staging, images, QEMU targets, and the ports
+  explosion/   this repo — staging, images, QEMU targets, the ports, and
+               the installer
   rust/        fork of rust-lang/rust with the x86_64-unknown-quark std PAL
 ```
 
@@ -61,6 +62,26 @@ make run-iso   # boot it, with DISK=<image> attached to install onto
   exactly its memory, and the file server is told its root is `ram0`. So a
   live system costs its root in memory, twice while Bang reads it, and
   `-m 1G` is not generous. `tools/make-esp.sh` builds both EFI partitions.
+- **`boot.img` is made while staging**, not after: the root carries a copy
+  of everything the firmware starts (`usr/lib/explosion/boot`), because a
+  system installs another by copying what it was started with, and
+  `bang-install` has nowhere else to get it.
+- **Every staged file is some package's.** `packages.conf` says whose, the
+  first pattern that matches wins, and `system` takes what is left;
+  `tools/stage-packages.py` writes the lists last and stops on a file
+  nothing claims. A new kind of file in an image is a decision about which
+  set installs it — a test in `base` is a test on every installed system.
+- **The lists name files as the image has them**, not as the stage does:
+  `stage-packages.py` has the same renaming rule as `populate-ext.sh`
+  (`QSH.ELF` is `/usr/bin/qsh`). Change one and change the other.
+- **`live/` is the installation disc's own**, staged for `make iso` and
+  nothing else. Its greeting (`etc/issue`, `etc/motd`) is package `live`,
+  which no set an installer asks for has; its `etc/init.conf` is `system`'s,
+  so what is installed has the session it was installed from.
+- **The programs in `programs/` are ExplOSion's**: `qpkg`, `bang-install`
+  and `guide` are built here against `../quarkutils/quark-rt`, with the
+  same toolchain pin as the three trees below. The dependency still runs one
+  way.
 - **`make -o stage hd` does not rebuild `fat.img`.** A change to `init` or to
   the kernel needs the image rules to run; when in doubt, `make stage` first.
 - **Names.** Quark's own install names files the way FAT wants them
@@ -84,6 +105,7 @@ of sleeping for a guess and looking at a picture.
 tools/boot-test.sh <keys-file> <shot.ppm>     # IMG=… RUNDIR=… for a second boot
 tools/check-rootfs.sh hdimage.bin             # e2fsck what the boot left
 tools/crash-test.sh                           # stop mid-write, recover, check
+tools/install-test.sh                         # install from the ISO; start the disk
 ```
 
 A keys file is one operation per line (`tools/drive-qemu.py` has the list):
@@ -115,6 +137,16 @@ if an `expect` gave up or the kernel faulted.
   the console's built-in ASCII; an image that loads a font at boot is read
   with `QUARK_FONT_HEX` naming that font's `.hex` file, or every character
   on it is a `?`.
+
+- **The guide is the install test's script.** `tools/install-test.sh` types
+  every line `docs/install.md` sets apart as a command, in order, so a line
+  there that is not a command to type breaks the test — say an alternative
+  in the prose. It takes the disc out at `shutdown -r`, as the guide tells a
+  person to, and then boots the disk alone.
+- **`DRIVE_TIMES=1`** has each `expect` say how long it waited, which is how
+  to find out where an install spends its time.
+- **Keep `RUNDIR` short.** The emulator's control socket is in it, and a
+  socket's path has to fit in about a hundred characters.
 
 What to run on the machine: `dtest` (the kernel, through its ABI),
 `runtests /etc/libc.tests` (the C library's tests, which are quarkutils':

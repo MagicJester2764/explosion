@@ -8,8 +8,10 @@ other people's software is built for it.
 ../quarkutils       the programs that run on it
 ../bang             the UEFI bootloader
 ../quark-toolchain  the cross compilers, for the ports
-./                  this: staging, image assembly, QEMU targets, and every
-                    port of somebody else's software
+./                  this: staging, image assembly, QEMU targets, every port
+                    of somebody else's software, and the three programs that
+                    make a distribution of it: its packages, its installer
+                    and its guide
 ```
 
 The dependency runs one way. ExplOSion reaches down to the three trees beside
@@ -22,8 +24,9 @@ like.
 make stage   # build ../quark, ../quarkutils and ../bang, collect into stage/
 make hd      # assemble hdimage.bin (GPT: EFI system partition + ext2 root)
 make run     # boot it in QEMU
-make iso     # assemble explosion.iso: a system that runs from memory
-make run-iso # boot that
+make iso     # assemble explosion.iso: the installation disc
+make run-iso # boot that, with DISK=<image> as a disk to install onto
+make run-disk DISK=<image>   # boot a disk as it is: what was installed
 ```
 
 The root is ext2 unless asked otherwise: `make hd-ext4` and `make run-ext4`
@@ -37,13 +40,17 @@ USB stick, as a disk: its EFI partition is named in an El Torito catalog
 for the first and in a GPT for the second. What is written to the root
 while it runs is written to memory and gone at power-off.
 
+It is the installation disc: it greets whoever logs in with where the guide
+is, and [`docs/install.md`](docs/install.md) is the guide. See *Installing*.
+
 `make clean` removes the staging directory and the images. `make distclean`
 also cleans the trees next door.
 
 It needs, besides what the three trees need to build: `mtools`, `mkgpt`,
 `e2fsprogs` (`mkfs.ext2`, `mkfs.ext4`, `debugfs`), `xorriso` for the ISO, and
-`qemu-system-x86_64`. The firmware is Bang's copy of OVMF; set `OVMF_PATH` to
-use another.
+`qemu-system-x86_64`; and for `tools/install-test.sh`, `sfdisk` and
+`dosfstools`, which check what the guest made. The firmware is Bang's copy of
+OVMF; set `OVMF_PATH` to use another.
 
 QEMU is started with `-cpu max`, deliberately: the default CPU models expose
 neither SMEP nor SMAP, so without it the kernel's supervisor-mode protections
@@ -65,7 +72,16 @@ stage/usr/bin/        everything else, packed into the root         (quarkutils)
 stage/etc/            passwd                                        (quarkutils)
 stage/bin/sh          the shell, where a program looks for one      (here)
 stage/BOOTX64.EFI     Bang itself, installed to the ESP             (bang)
+stage/usr/bin/qpkg, bang-install, guide                             (here)
+stage/usr/lib/explosion/boot/   what the firmware starts, again     (here)
+stage/usr/share/doc/explosion/install.md   the guide                (here)
+stage/var/lib/qpkg/   whose every file is                           (here)
 ```
+
+The last four are what lets a system install another. The root carries a
+copy of everything on the EFI partition — Bang, the kernel, its modules and
+`boot.img` — because an installer has nothing to copy from but the system it
+is running on.
 
 The kernel and the userland each produce their share through
 `make install DESTDIR=…`, so nothing here reaches into a source tree. The
@@ -132,6 +148,62 @@ session /usr/bin/getty
 Without one the console draws the nearest ASCII to each character it has no
 picture of, and a box where there is none.
 
+## Installing
+
+`make iso` makes the installation disc, and `docs/install.md` is how it is
+used: partition a disk, make filesystems, mount them, copy the system in,
+install the boot loader, restart. Each step is a command typed at a shell,
+as on Arch, whose installation this takes its shape from. On the disc the
+guide is `guide`, a section at a time.
+
+```
+parts disk0 init
+parts disk0 new efi 256M
+parts disk0 new root
+mkfs.fat -F 32 /dev/disk0p1
+mkfs.ext4 /dev/disk0p2
+mount /dev/disk0p2 /mnt
+mount --mkdir /dev/disk0p1 /mnt/boot
+qpkg strap /mnt base
+bang-install /mnt
+umount /mnt/boot
+umount /mnt
+shutdown -r
+```
+
+What is under those commands is not Linux's, and three things about it are
+this system's own:
+
+- **A mount is a server.** `mount` starts a file server for the partition
+  and hands it to the one its directory is in. `mount` with no arguments
+  says which process serves each filesystem, `ps` shows them, and the FAT
+  code reading an EFI partition somebody just made is in another address
+  space from the code serving the root.
+- **A disk is claimed, not locked.** A driver gives each partition to one
+  writer at a time, so a filesystem that is mounted cannot be formatted —
+  not because a tool checks, but because the file server serving it holds
+  it. `disks` shows who holds what.
+- **A package says what its programs may do.** Every program here carries
+  what it asks the system to allow it — ports, interrupts, a scheduling
+  band — and a spawner grants from that. `qpkg info NAME` reads it out:
+  what a package can do is known before it is installed. And a system
+  installs another by copying itself: `qpkg strap` takes the packages from
+  the running system, with the lists that say what they are.
+
+To try it by hand, give the disc a blank disk and follow the guide; the disk
+then starts by itself:
+
+```bash
+truncate -s 1G disk.img
+make run-iso DISK=disk.img      # install, and `shutdown` when done
+make run-disk DISK=disk.img     # what was installed
+```
+
+`tools/install-test.sh` does the same without anybody at the keyboard: it
+types the guide's own commands at the disc, with a blank disk attached,
+restarts into the disk, and has this machine's `sfdisk`, `fsck.fat` and
+`e2fsck` look at what was made.
+
 ## The ports
 
 `toolchain/` builds coreutils, libwayland, the font stack, cairo, weston's
@@ -178,16 +250,26 @@ programs asks to be allowed. `packages.conf` says which files are whose, and
 `tools/stage-packages.py` writes the lists while staging. `system` comes last
 there and takes what nothing else claimed, so every file is somebody's.
 
-```bash
-cd stage
-../tools/qpkg build drivers 0.1.0 boot/DISK.ELF boot/KEYBOARD.ELF
-../tools/qpkg info drivers-0.1.0.qpkg
-../tools/qpkg install drivers-0.1.0.qpkg /path/to/root
+```
+~$ qpkg
+PACKAGE      SET       VERSION   FILES       SIZE
+boot         base      0.21          7    1.8 MiB
+fstools      base      0.21          6    3.6 MiB
+quark        base      0.21          2     97 KiB
+system       base      0.21         28    1.3 MiB
+~$ qpkg info boot
+boot 0.21
+  What the firmware starts: Bang, the kernel, and the services a system runs before it has a root.
+  set base, 7 files, 1.8 MiB
+What its programs ask to be allowed:
+  /usr/lib/explosion/boot/drivers/boot.img:disk band driver, ioport 0x1F0-0x1F7, ioport 0x3F6-0x3F6, irq 14
+  /usr/lib/explosion/boot/drivers/boot.img:keyboard band driver, ioport 0x60-0x64, irq 1, irq 12
+  /usr/lib/explosion/boot/drivers/boot.img:net band driver, ioport 0x0-0xFFFF, irq any, phys_alloc 64 pages
+  ...
 ```
 
-`info` reads the capability manifest out of each binary, the same way the
-spawner finds it at runtime, so what a package will be allowed to do is
-inspectable before it is installed rather than discovered when it runs:
+(The network driver asks for every port there is and any interrupt. This is
+where that shows.)
 
 `qpkg files`, `owner` and `verify` are what they say — `verify` reads every
 file back against its checksum — and `qpkg strap ROOT SET...` copies the

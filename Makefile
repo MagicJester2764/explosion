@@ -10,6 +10,7 @@
 #   make run     boot it in QEMU
 #   make iso     assemble explosion.iso, which boots from memory
 #   make run-iso boot that, with DISK=<image> as a disk to install onto
+#   make run-disk DISK=<image>   boot a disk as it is: what was installed
 #
 # Nothing here is reached into by its neighbours: the dependency runs one way,
 # from the distro down to the kernel, the userland and the bootloader.
@@ -27,10 +28,10 @@ STAGE := stage
 # What every package in an image built here says its version is.
 VERSION := 0.21
 
-# ExplOSion's own programs: its package tool, and what puts the boot loader
-# on a new system. They are built against ../quarkutils' runtime, as that
-# tree's programs are.
-PROGRAMS := qpkg bang-install
+# ExplOSion's own programs: its package tool, what puts the boot loader on a
+# new system, and the reader of the installation guide. They are built
+# against ../quarkutils' runtime, as that tree's programs are.
+PROGRAMS := qpkg bang-install guide
 
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
 # nearly full without them, and 64 MiB filled up the moment a program linked
@@ -82,7 +83,12 @@ ROOT_OVERLAYS   ?=
 # and assembling the image that does should not need a cross compiler.
 FSTOOLS         ?= fstools
 
-.PHONY: all stage hd hd-ext4 hd-fat32 iso run run-ext4 run-fat32 run-iso clean distclean FORCE
+# What makes an installation disc of a system: how it greets, and a session
+# on a terminal. Staged for `make iso` and nothing else.
+LIVE_OVERLAY    :=
+iso: LIVE_OVERLAY := live
+
+.PHONY: all stage hd hd-ext4 hd-fat32 iso run run-ext4 run-fat32 run-iso run-disk clean distclean FORCE
 
 all: hd
 
@@ -117,9 +123,10 @@ stage: FORCE
 	@# another by copying what it was started with, and tools/make-esp.sh
 	@# lays the same files out for an image built here.
 	@./tools/make-boot-img.sh $(STAGE) $(BOOT_IMG) $(BOOT_IMG_SIZE_KB)
-	@mkdir -p $(STAGE)/usr/lib/explosion/boot/drivers
+	@mkdir -p $(STAGE)/usr/lib/explosion/boot/drivers $(STAGE)/usr/share/doc/explosion
 	@cp $(STAGE)/BOOTX64.EFI $(STAGE)/kernel.bin bang.cfg $(STAGE)/usr/lib/explosion/boot/
 	@cp $(STAGE)/drivers/* $(BOOT_IMG) $(STAGE)/usr/lib/explosion/boot/drivers/
+	@cp docs/install.md $(STAGE)/usr/share/doc/explosion/install.md
 	@# `/bin/sh` is where a program that starts a shell looks for one —
 	@# weston-terminal execs `$$SHELL` or this — and nothing in Quark's tree
 	@# decides where a distribution puts its shell. A copy rather than a link,
@@ -168,7 +175,7 @@ stage: FORCE
 		echo "tests: staged $$n programs from $$d"; \
 	done
 	@# Runs either way, like stage-coreutils.sh, so unsetting it un-stages.
-	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS)
+	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
 	@# Nearly last, since it lists every program the stage now has.
@@ -319,6 +326,12 @@ run-fat32: hd-fat32
 # With a disk to install onto, if there is one to hand: DISK=target.img.
 run-iso: iso
 	qemu-system-x86_64 $(QEMU_FLAGS) -serial stdio -cdrom $(ISO) $(if $(DISK),-hda $(DISK))
+
+# A disk as it is, and nothing built: what an installation left. (`run`
+# assembles the image it starts, and would assemble it over this one.)
+run-disk:
+	@test -n "$(DISK)" || { echo "usage: make run-disk DISK=<image>"; exit 2; }
+	qemu-system-x86_64 $(QEMU_FLAGS) -serial stdio -hda $(DISK)
 
 # ---------------------------------------------------------------------------
 
