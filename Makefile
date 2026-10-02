@@ -27,9 +27,10 @@ STAGE := stage
 # What every package in an image built here says its version is.
 VERSION := 0.21
 
-# ExplOSion's own programs: its package tool, so far. They are built
-# against ../quarkutils' runtime, as that tree's programs are.
-PROGRAMS := qpkg
+# ExplOSion's own programs: its package tool, and what puts the boot loader
+# on a new system. They are built against ../quarkutils' runtime, as that
+# tree's programs are.
+PROGRAMS := qpkg bang-install
 
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
 # nearly full without them, and 64 MiB filled up the moment a program linked
@@ -112,6 +113,13 @@ stage: FORCE
 		cp programs/$$p/target/x86_64-unknown-none/release/$$p $(STAGE)/usr/bin/$$p; \
 	done
 	@mkdir -p $(STAGE)/home/root $(STAGE)/bin
+	@# What the firmware starts, kept in the root as well: a system installs
+	@# another by copying what it was started with, and tools/make-esp.sh
+	@# lays the same files out for an image built here.
+	@./tools/make-boot-img.sh $(STAGE) $(BOOT_IMG) $(BOOT_IMG_SIZE_KB)
+	@mkdir -p $(STAGE)/usr/lib/explosion/boot/drivers
+	@cp $(STAGE)/BOOTX64.EFI $(STAGE)/kernel.bin bang.cfg $(STAGE)/usr/lib/explosion/boot/
+	@cp $(STAGE)/drivers/* $(BOOT_IMG) $(STAGE)/usr/lib/explosion/boot/drivers/
 	@# `/bin/sh` is where a program that starts a shell looks for one —
 	@# weston-terminal execs `$$SHELL` or this — and nothing in Quark's tree
 	@# decides where a distribution puts its shell. A copy rather than a link,
@@ -173,13 +181,11 @@ stage: FORCE
 # Filesystem images
 # ---------------------------------------------------------------------------
 
-# The essential services, mounted by init before a real root filesystem exists.
+# The essential services, mounted by init before a real root filesystem
+# exists. Staging makes it (tools/make-boot-img.sh), because the root carries
+# a copy.
 $(BOOT_IMG): stage
-	dd if=/dev/zero of=$(BOOT_IMG) bs=1k count=$(BOOT_IMG_SIZE_KB) status=none
-	mformat -i $(BOOT_IMG) -F ::
-	@cd $(STAGE)/boot && find . -type f | while read f; do \
-		mcopy -i $(CURDIR)/$(BOOT_IMG) "$$f" "::$$f"; \
-	done
+	@true
 
 # FAT32 root. Names keep their case here, and a long one gets a short alias
 # that is all Quark's FAT32 reads.
