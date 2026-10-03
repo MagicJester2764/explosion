@@ -18,7 +18,9 @@
 # iteration counts, and which their suite runs with the arguments they expect.
 # A test harness told to run ten billion iterations is not a program falling
 # over, and zlib's `example` writes a gzip file over whatever path it is
-# given.
+# given. And `dtest` is not run with nothing to say: that is the whole of its
+# suite, which every acceptance runs on every image and which takes longer
+# than thirty seconds on one processor. Given anything else, it is swept.
 #
 # The file `/etc/hostile-sample` is written here to be that path: something
 # that exists, that a program may read, write or destroy, and that nothing
@@ -71,6 +73,9 @@ printf 'A file for the hostile-argument sweep to read, write and ruin.\n' \
         for args in "" "-" "--" "-x" "--help" "$LONG" /nonexistent /etc \
                     /dev/null "$SAMPLE" 99999999999999999999 -1 0 héllo \
                     "$CTRL" "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"; do
+            if [ "$name" = dtest ] && [ -z "$args" ]; then
+                continue
+            fi
             echo "? @30 $name $args"
         done
     done
