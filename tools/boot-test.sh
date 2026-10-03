@@ -23,9 +23,9 @@
 #
 # The machine also has QEMU's `edu` device in it: a device with nothing to
 # do but be driven, whose registers are memory at an address the firmware
-# chose and whose interrupt is a message of its own. Nothing notices it
-# unless the image starts its driver (`start /usr/bin/edu` in
-# `/etc/init.conf`), and then `dtest msi` has a device to ask about.
+# chose and whose interrupt is a message of its own. The device manager
+# starts its driver where the image has it (`/usr/lib/drivers`, in the
+# `tests` package), and then `dtest msi` has a device to ask about.
 # `dtest pressure` wants the image to have started something too: `swapd`,
 # with a file to write memory out to (`start /usr/bin/swapd /var/swap 16`).
 #

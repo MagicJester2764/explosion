@@ -117,10 +117,11 @@ first's, which took it away from the second when it ended, and the second's
 network test failed. Four images tested together did that to each other
 according to which finished first.
 
-Every machine they start has QEMU's `edu` device in it, which nothing
-notices unless the image starts its driver: `start /usr/bin/edu` in
-`/etc/init.conf`, and then `dtest msi` has a device whose interrupt is a
-message of its own to ask about. (The driver is in the `tests` package.)
+Every machine they start has QEMU's `edu` device in it, and the device
+manager starts its driver where the image has one: `/usr/lib/drivers`, where
+the `tests` package puts it. Then `dtest msi` has a device whose interrupt is
+a message of its own to ask about, and `dtest devices` a driver to try what a
+driver may not do.
 
 A machine has somewhere to write memory out to if its image starts `swapd`:
 `start /usr/bin/swapd /var/swap 16` in `/etc/init.conf`, and then `dtest

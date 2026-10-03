@@ -323,10 +323,12 @@ server: it has found what reading the code did not.
 On the machine itself, `dtest` checks the kernel through its ABI, `runtests
 /etc/<suite>.tests` runs a list of test programs, and `qfuzz` sends every
 service requests made from a seed. Two of `dtest`'s sections need something
-the image has to start: `dtest msi` the driver for the device every test
-machine is given (`start /usr/bin/edu`), and `dtest pressure` somewhere to
-write memory out to (`start /usr/bin/swapd /var/swap 16`). Without them each
-says so and checks what it can.
+the image has to have: `dtest msi` the driver for the device every test
+machine is given, which the device manager starts from `/usr/lib/drivers`
+where the `tests` package puts it, and `dtest pressure` somewhere to write
+memory out to (`start /usr/bin/swapd /var/swap 16`). Without them each says
+so and checks what it can. `lspci` says what is in the machine and which
+program drives each device.
 
 ## Packages
 

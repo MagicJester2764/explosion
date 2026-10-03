@@ -32,6 +32,7 @@ TYPES = {
     11: "clock",
     12: "power",
     13: "swap",
+    14: "pci_device",
 }
 
 # Not a capability: a request to be scheduled in a band (PRIORITY_REQ in
@@ -40,10 +41,20 @@ TYPES = {
 PRIORITY_REQ = 0x100
 BANDS = {0: "driver", 1: "server", 2: "normal", 3: "idle"}
 
+# Not a capability either: a device the program drives (MATCH_REQ), which
+# the device manager starts it for, holding that device. Matched as
+# `key & mask == value` over vendor << 48 | device << 32 | class code << 8.
+MATCH_REQ = 0x101
+
 
 def describe(cap_type, p0, p1):
     if cap_type == PRIORITY_REQ:
         return f"band {BANDS.get(p0, p0)}"
+    if cap_type == MATCH_REQ:
+        if p1 == 0xFFFFFFFF << 32:
+            return f"drives {p0 >> 48:04x}:{(p0 >> 32) & 0xFFFF:04x}"
+        width = 6 if p1 == 0xFFFFFF << 8 else 4
+        return f"drives class {(p0 >> 8) >> (24 - width * 4):0{width}x}"
     name = TYPES.get(cap_type, f"type{cap_type}")
     if name == "ioport":
         return f"ioport 0x{p0:X}-0x{p1:X}"
@@ -55,6 +66,8 @@ def describe(cap_type, p0, p1):
         return "phys_alloc unlimited" if p0 == 0 else f"phys_alloc {p0} pages"
     if name == "task_mgmt":
         return "task_mgmt any" if p0 == 0 else f"task_mgmt tid {p0}"
+    if name == "pci_device":
+        return "pci_device any" if p0 == 0xFFFFFFFF else f"pci_device {p0 >> 8:02x}:{(p0 >> 3) & 0x1F:02x}.{p0 & 7}"
     return name
 
 
