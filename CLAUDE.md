@@ -151,6 +151,16 @@ are in the same memory at once — a removed directory left on the disk, a
 file that would not map and a wait told its child was process 0 were each
 found only there. `make run` gives it four.
 
+`IOMMU=1` gives the machine Intel's IOMMU (`-device intel-iommu`), which
+QEMU has only on its q35 chipset — a different machine again, whose disks
+are on AHCI and nothing answers the old IDE ports, so it boots the live
+ISO (`ISO=explosion.iso`), which runs from memory. There a device reaches
+what its driver claimed and was given and nothing else, and `dtest iommu`
+holds the kernel to it, with `edu` started; a driver that does DMA is
+tried there after a change, and so is the kernel after a change to who
+owns memory. The disk driver met that machine first: nothing at its ports
+answers 0xFF, which looked like a drive that was always busy.
+
 `crash-test.sh` stops the machine with three things on the disk — a removed
 file a program still holds, a file written and synced, and, on ext4, a
 directory being changed as it stops — and recovers the disk twice: with

@@ -12,6 +12,9 @@
 # and SMAP. `CPU=qemu64` has neither, and is how the kernel is tried on a
 # machine where it cannot turn them on.
 # `SMP` is how many processors the machine has: one unless said otherwise.
+# `IOMMU=1` gives it Intel's IOMMU (`-device intel-iommu`), which wants QEMU's
+# q35 chipset — a machine with no disk on the old IDE ports, so it is for a
+# system that runs from memory: the live ISO.
 # `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
 # machine with memory above four gigabytes, which is a different machine to
 # start on: the firmware loads the bootloader up there, the kernel has more
@@ -54,6 +57,11 @@ else
     DRIVES="-hda ${IMG:-hdimage.bin}"
 fi
 mkdir -p "$RUN"
+CHIPSET=${CHIPSET:-}
+if [ -n "$IOMMU" ]; then
+    # The IOMMU first: the devices after it are behind it.
+    CHIPSET="-machine q35 -device intel-iommu"
+fi
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
 rm -f "$RUN/qmp.sock" "$RUN/serial.log" "$2"
@@ -71,7 +79,7 @@ cp ../bang/firmware-redist/ovmf/OVMF_VARS.fd "$RUN/OVMF_VARS.fd"
 (setsid python3 "$HERE/echo-server.py" 7007 >/dev/null 2>&1 &)
 # -m 1G for the reason the Makefile gives: a toolkit-linked program is tens of
 # megabytes and is in memory twice while it is being started.
-qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m "${MEM:-1G}" \
+qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -smp "${SMP:-1}" -m "${MEM:-1G}" $CHIPSET \
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
