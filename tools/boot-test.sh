@@ -17,9 +17,11 @@
 # starts the AHCI driver for; `CHIPSET="-machine q35"` is that machine
 # without the IOMMU.
 # `VIRTIO=1` puts the disk on virtio (`virtio-blk-pci`) where it would be on
-# the IDE ports, and the network card with it (`virtio-net-pci`) where the
-# RTL8139 would be: the devices a virtual machine is usually given, each
-# with a driver the device manager starts for it.
+# the IDE ports, the network card with it (`virtio-net-pci`) where the
+# RTL8139 would be, and the display on a virtio GPU (`virtio-gpu-pci`, and
+# no VGA): the devices a virtual machine is usually given, each with a
+# driver the device manager starts for it. The firmware has no framebuffer
+# to give for that display, and the screen is the driver's from the start.
 # `NVME=1` puts the disk on an NVMe controller (`nvme`) instead, which the
 # firmware starts from as from any disk and the NVMe driver serves.
 # `USB=1` is a machine whose keyboard and mouse are USB's and nothing
@@ -81,6 +83,12 @@ else
 fi
 NIC=rtl8139
 [ -n "$VIRTIO" ] && NIC=virtio-net-pci
+# The virtio GPU's display can be asked to be another size as a viewer
+# whose window was made another size asks: through a VNC socket, which a
+# script's `run` step hands `tools/vnc-size.py` as "$RUN/vnc.sock".
+DISPLAY_DEVICE=
+[ -n "$VIRTIO" ] && DISPLAY_DEVICE="-vga none -device virtio-gpu-pci -vnc unix:$RUN/vnc.sock"
+export RUN
 mkdir -p "$RUN"
 CHIPSET=${CHIPSET:-}
 MACHINE=q35
@@ -113,7 +121,7 @@ if [ -n "$USB" ]; then
 fi
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
-rm -f "$RUN/qmp.sock" "$RUN/serial.log" "$2"
+rm -f "$RUN/qmp.sock" "$RUN/vnc.sock" "$RUN/serial.log" "$2"
 
 cd "$TOP"
 # The firmware writes its variable store, and the one in bang is tracked. Boot
@@ -132,7 +140,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -s
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
-  $DRIVES $USBDEVS -display none \
+  $DRIVES $USBDEVS $DISPLAY_DEVICE -display none \
   -device $NIC,netdev=n -netdev user,id=n \
   -device edu \
   -qmp unix:"$RUN/qmp.sock",server,nowait \

@@ -166,9 +166,15 @@ start it only for an IDE controller: nothing at its ports answers 0xFF,
 which looked like a drive that was always busy.
 
 `VIRTIO=1` gives the machine the devices a virtual machine is usually
-given instead of the ones a PC had: its disk on virtio (`virtio-blk-pci`)
-and its network card too (`virtio-net-pci`), each with a driver in the
-boot image that the device manager starts for it. A change to a
+given instead of the ones a PC had: its disk on virtio (`virtio-blk-pci`),
+its network card too (`virtio-net-pci`), and its display a virtio GPU with
+no VGA beside it (`virtio-gpu-pci`), each with a driver in the boot image
+that the device manager starts for it. That display gives the firmware no
+framebuffer: the screen is its driver's from the start, and what is drawn
+is copied to it as it is said (`dtest display` changes its size and back).
+Its size follows the host's as a viewer's window does: the machine has a
+VNC socket, and `tools/vnc-size.py "$RUN/vnc.sock" W H`, from a script's
+`run` step, asks for a size and waits for the guest to show it. A change to a
 driver, to the device manager or to how a device reaches memory is tried
 there as well as on the default machine. With `IOMMU=1` it is a q35 machine
 with virtio's modern devices behind the IOMMU.
