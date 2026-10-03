@@ -251,20 +251,30 @@ fat.img: stage $(BOOT_IMG)
 
 HD_SECTORS = $(shell expr '(' $(ESP_KB) + $(ROOTFS_SIZE_KB) + 2048 ')' '*' 2)
 
-hd: fat.img $(ROOTFS_EXT2_IMG)
+# The root partition has a GUID of its own, which mkgpt makes up, and the EFI
+# system partition says which (a module, `ROOT.CFG`), written into the image
+# once the table is: `init` finds the root on whichever disk has it, whatever
+# name that disk's driver took. Every disk's driver takes the first free
+# diskN when it is ready, so on a machine with a USB disk plugged in, or two
+# kinds of disk, which is disk0 is a matter of which driver was quickest.
+define root_disk
 	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
 		--part fat.img --type system \
-		--part $(ROOTFS_EXT2_IMG) --type linux
+		--part $(1) --type linux
+	@set -- $$(python3 tools/gpt-root.py $(HD_IMG)) && \
+	printf 'root partuuid %s\n' "$$2" > root.cfg && \
+	mcopy -o -i $(HD_IMG)@@$$1 root.cfg ::/drivers/ROOT.CFG && \
+	rm -f root.cfg
+endef
+
+hd: fat.img $(ROOTFS_EXT2_IMG)
+	$(call root_disk,$(ROOTFS_EXT2_IMG))
 
 hd-ext4: fat.img $(ROOTFS_EXT4_IMG)
-	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
-		--part fat.img --type system \
-		--part $(ROOTFS_EXT4_IMG) --type linux
+	$(call root_disk,$(ROOTFS_EXT4_IMG))
 
 hd-fat32: fat.img $(ROOTFS_IMG)
-	mkgpt -o $(HD_IMG) --image-size $(HD_SECTORS) \
-		--part fat.img --type system \
-		--part $(ROOTFS_IMG) --type linux
+	$(call root_disk,$(ROOTFS_IMG))
 
 # ---------------------------------------------------------------------------
 # The live system, and the ISO it boots from

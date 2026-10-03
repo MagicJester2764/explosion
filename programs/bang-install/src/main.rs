@@ -15,7 +15,9 @@
 //!
 //! - `bang.cfg`, the menu;
 //! - `drivers/root.cfg`, which says where the root is. Only an installer
-//!   knows that: it is the partition this was told to install to, and
+//!   knows that: it is the partition this was told to install to, named by
+//!   the GUID its partition table gives it — which finds it on whichever
+//!   disk it turns out to be, whatever name that disk's driver took — and
 //!   `init` reads it out of the modules to tell the file server.
 //!
 //! Firmware finds Bang by where it is — `\EFI\BOOT\BOOTX64.EFI`, the name it
@@ -251,10 +253,22 @@ pub extern "C" fn _start() -> ! {
     }
     let _ = vfs::close(vfs_tid, dir);
 
-    // Where the root is, for init to tell the file server.
-    let mut line = [0u8; 64];
+    // Where the root is, for init to tell the file server: the partition
+    // itself, where its table names it, else the driver and volume it is
+    // on as this runs.
+    let number = volume.iter().fold(0u64, |n, d| n.saturating_mul(10).saturating_add((d - b'0') as u64));
+    let id = nameserver::lookup(driver).and_then(|tid| block::id(tid, number).ok()).filter(|id| *id != [0; 16]);
+    let mut guid = [0u8; 36];
+    let said: [&[u8]; 5] = match id {
+        Some(id) => {
+            block::guid_to_text(&id, &mut guid);
+            [b"root partuuid ", &guid, b"\n", b"", b""]
+        }
+        None => [b"root ", driver, b" ", volume, b"\n"],
+    };
+    let mut line = [0u8; 80];
     let mut len = 0;
-    for part in [&b"root "[..], driver, b" ", volume, b"\n"] {
+    for part in said {
         line[len..len + part.len()].copy_from_slice(part);
         len += part.len();
     }

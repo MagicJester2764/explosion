@@ -22,6 +22,12 @@
 # with a driver the device manager starts for it.
 # `NVME=1` puts the disk on an NVMe controller (`nvme`) instead, which the
 # firmware starts from as from any disk and the NVMe driver serves.
+# `USB=1` is a machine whose keyboard and mouse are USB's and nothing
+# else's: q35 with no i8042 (`i8042=off`), and an xHCI controller with a
+# keyboard, a mouse and a disk on it — `STICK`, a FAT image, made with a
+# file on it (`HELLO.TXT`) if it is not there. With `HUB=1` the keyboard and
+# the mouse are behind a hub. Whatever a script types reaches the machine
+# through the USB keyboard, and what it points with through the mouse.
 # `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
 # machine with memory above four gigabytes, which is a different machine to
 # start on: the firmware loads the bootloader up there, the kernel has more
@@ -77,9 +83,33 @@ NIC=rtl8139
 [ -n "$VIRTIO" ] && NIC=virtio-net-pci
 mkdir -p "$RUN"
 CHIPSET=${CHIPSET:-}
+MACHINE=q35
+[ -n "$USB" ] && MACHINE="q35,i8042=off"
 if [ -n "$IOMMU" ]; then
     # The IOMMU first: the devices after it are behind it.
-    CHIPSET="-machine q35 -device intel-iommu"
+    CHIPSET="-machine $MACHINE -device intel-iommu"
+elif [ -n "$USB" ]; then
+    CHIPSET="-machine $MACHINE"
+fi
+USBDEVS=
+if [ -n "$USB" ]; then
+    STICK=${STICK:-$RUN/stick.img}
+    if [ ! -f "$STICK" ]; then
+        dd if=/dev/zero of="$STICK" bs=1M count=40 status=none
+        mformat -i "$STICK" -F -v STICK ::
+        printf 'hello from a USB disk\n' > "$RUN/hello.txt"
+        mcopy -i "$STICK" "$RUN/hello.txt" ::HELLO.TXT
+    fi
+    USBDEVS="-device qemu-xhci,id=xhci"
+    if [ -n "$HUB" ]; then
+        USBDEVS="$USBDEVS -device usb-hub,bus=xhci.0,port=1 -device usb-kbd,bus=xhci.0,port=1.1 -device usb-mouse,bus=xhci.0,port=1.2"
+    else
+        USBDEVS="$USBDEVS -device usb-kbd,bus=xhci.0 -device usb-mouse,bus=xhci.0"
+    fi
+    # A block device of its own, not a drive: pulled out (`device_del
+    # stickdev`), it can be plugged in again by the same name.
+    USBDEVS="$USBDEVS -blockdev node-name=stick,driver=raw,file.driver=file,file.filename=$STICK"
+    USBDEVS="$USBDEVS -device usb-storage,bus=xhci.0,drive=stick,id=stickdev"
 fi
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
@@ -102,7 +132,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -s
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
-  $DRIVES -display none \
+  $DRIVES $USBDEVS -display none \
   -device $NIC,netdev=n -netdev user,id=n \
   -device edu \
   -qmp unix:"$RUN/qmp.sock",server,nowait \

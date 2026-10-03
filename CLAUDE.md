@@ -173,6 +173,13 @@ driver, to the device manager or to how a device reaches memory is tried
 there as well as on the default machine. With `IOMMU=1` it is a q35 machine
 with virtio's modern devices behind the IOMMU.
 
+`USB=1` is a machine whose keyboard and mouse are on USB and nowhere else:
+q35 with no i8042, and an xHCI controller with a keyboard, a mouse and a FAT
+disk of its own on it (`HUB=1` puts the first two behind a hub). Everything
+a script types reaches it through the USB keyboard, which is the keyboard's
+test; `lsusb`, `mousetest`, and the disk mounted, read, pulled out and put
+back are the rest (the acceptance's `e4-usb`).
+
 `NVME=1` puts the disk on an NVMe controller (`-device nvme`) instead: the
 firmware starts from it as from any disk, and from there on it is the NVMe
 driver's, in the boot image. With `IOMMU=1` the controller is behind the
