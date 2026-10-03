@@ -173,6 +173,11 @@ driver, to the device manager or to how a device reaches memory is tried
 there as well as on the default machine. With `IOMMU=1` it is a q35 machine
 with virtio's modern devices behind the IOMMU.
 
+`NVME=1` puts the disk on an NVMe controller (`-device nvme`) instead: the
+firmware starts from it as from any disk, and from there on it is the NVMe
+driver's, in the boot image. With `IOMMU=1` the controller is behind the
+IOMMU, its queues among what its driver was given.
+
 `crash-test.sh` stops the machine with three things on the disk — a removed
 file a program still holds, a file written and synced, and, on ext4, a
 directory being changed as it stops — and recovers the disk twice: with

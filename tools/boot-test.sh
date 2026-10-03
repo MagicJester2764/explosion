@@ -20,6 +20,8 @@
 # the IDE ports, and the network card with it (`virtio-net-pci`) where the
 # RTL8139 would be: the devices a virtual machine is usually given, each
 # with a driver the device manager starts for it.
+# `NVME=1` puts the disk on an NVMe controller (`nvme`) instead, which the
+# firmware starts from as from any disk and the NVMe driver serves.
 # `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
 # machine with memory above four gigabytes, which is a different machine to
 # start on: the firmware loads the bootloader up there, the kernel has more
@@ -57,7 +59,9 @@ TOP=$(cd "$HERE/.." && pwd)
 RUN=${RUNDIR:-${TMPDIR:-/tmp}/quark-boot-test}
 # A disk on the IDE ports, or on virtio.
 disk() {
-    if [ -n "$VIRTIO" ]; then
+    if [ -n "$NVME" ]; then
+        echo "-drive file=$1,if=none,id=disk0,format=raw -device nvme,serial=quark0,drive=disk0"
+    elif [ -n "$VIRTIO" ]; then
         echo "-drive file=$1,if=none,id=disk0,format=raw -device virtio-blk-pci,drive=disk0"
     else
         echo "-hda $1"
