@@ -15,6 +15,10 @@
 # `IOMMU=1` gives it Intel's IOMMU (`-device intel-iommu`), which wants QEMU's
 # q35 chipset — a machine with no disk on the old IDE ports, so it is for a
 # system that runs from memory: the live ISO.
+# `VIRTIO=1` puts the disk on virtio (`virtio-blk-pci`) where it would be on
+# the IDE ports, and the network card with it (`virtio-net-pci`) where the
+# RTL8139 would be: the devices a virtual machine is usually given, each
+# with a driver the device manager starts for it.
 # `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
 # machine with memory above four gigabytes, which is a different machine to
 # start on: the firmware loads the bootloader up there, the kernel has more
@@ -50,12 +54,22 @@
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
 RUN=${RUNDIR:-${TMPDIR:-/tmp}/quark-boot-test}
+# A disk on the IDE ports, or on virtio.
+disk() {
+    if [ -n "$VIRTIO" ]; then
+        echo "-drive file=$1,if=none,id=disk0,format=raw -device virtio-blk-pci,drive=disk0"
+    else
+        echo "-hda $1"
+    fi
+}
 if [ -n "$ISO" ]; then
     DRIVES="-cdrom $ISO"
-    [ -n "$IMG" ] && DRIVES="$DRIVES -hda $IMG"
+    [ -n "$IMG" ] && DRIVES="$DRIVES $(disk "$IMG")"
 else
-    DRIVES="-hda ${IMG:-hdimage.bin}"
+    DRIVES=$(disk "${IMG:-hdimage.bin}")
 fi
+NIC=rtl8139
+[ -n "$VIRTIO" ] && NIC=virtio-net-pci
 mkdir -p "$RUN"
 CHIPSET=${CHIPSET:-}
 if [ -n "$IOMMU" ]; then
@@ -84,7 +98,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -s
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
   $DRIVES -display none \
-  -device rtl8139,netdev=n -netdev user,id=n \
+  -device $NIC,netdev=n -netdev user,id=n \
   -device edu \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
   -serial file:"$RUN/serial.log" 2>/dev/null &

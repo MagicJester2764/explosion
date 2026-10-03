@@ -38,7 +38,10 @@ PROGRAMS := qpkg bang-install guide user as
 # nearly full without them, and 64 MiB filled up the moment a program linked
 # glib statically -- one of those is four megabytes on its own.
 ROOTFS_SIZE_KB  := 131072
-BOOT_IMG_SIZE_KB := 1024
+# The services started before there is a root, the drivers of the disks a
+# root can be on and of the network cards among them: a megabyte was full
+# once the cards' drivers came out of the network server.
+BOOT_IMG_SIZE_KB := 2048
 
 BOOT_IMG        := boot.img
 ROOTFS_IMG      := rootfs.img

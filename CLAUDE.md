@@ -162,6 +162,14 @@ tried there after a change, and so is the kernel after a change to who
 owns memory. The disk driver met that machine first: nothing at its ports
 answers 0xFF, which looked like a drive that was always busy.
 
+`VIRTIO=1` gives the machine the devices a virtual machine is usually
+given instead of the ones a PC had: its disk on virtio (`virtio-blk-pci`)
+and its network card too (`virtio-net-pci`), each with a driver in the
+boot image that the device manager starts for it. A change to a
+driver, to the device manager or to how a device reaches memory is tried
+there as well as on the default machine. With `IOMMU=1` it is a q35 machine
+with virtio's modern devices behind the IOMMU.
+
 `crash-test.sh` stops the machine with three things on the disk — a removed
 file a program still holds, a file written and synced, and, on ext4, a
 directory being changed as it stops — and recovers the disk twice: with
