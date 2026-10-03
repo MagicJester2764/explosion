@@ -13,8 +13,9 @@
 # machine where it cannot turn them on.
 # `SMP` is how many processors the machine has: one unless said otherwise.
 # `IOMMU=1` gives it Intel's IOMMU (`-device intel-iommu`), which wants QEMU's
-# q35 chipset — a machine with no disk on the old IDE ports, so it is for a
-# system that runs from memory: the live ISO.
+# q35 chipset — a machine whose disks are on AHCI, which the device manager
+# starts the AHCI driver for; `CHIPSET="-machine q35"` is that machine
+# without the IOMMU.
 # `VIRTIO=1` puts the disk on virtio (`virtio-blk-pci`) where it would be on
 # the IDE ports, and the network card with it (`virtio-net-pci`) where the
 # RTL8139 would be: the devices a virtual machine is usually given, each

@@ -154,13 +154,16 @@ found only there. `make run` gives it four.
 
 `IOMMU=1` gives the machine Intel's IOMMU (`-device intel-iommu`), which
 QEMU has only on its q35 chipset — a different machine again, whose disks
-are on AHCI and nothing answers the old IDE ports, so it boots the live
-ISO (`ISO=explosion.iso`), which runs from memory. There a device reaches
-what its driver claimed and was given and nothing else, and `dtest iommu`
-holds the kernel to it, with `edu` started; a driver that does DMA is
-tried there after a change, and so is the kernel after a change to who
-owns memory. The disk driver met that machine first: nothing at its ports
-answers 0xFF, which looked like a drive that was always busy.
+are on AHCI and nothing answers the old IDE ports; `CHIPSET="-machine q35"`
+is that machine without the IOMMU. Either boots a disk image, through the
+AHCI driver, or the live ISO (`ISO=explosion.iso`), which runs from
+memory. There a device reaches what its driver claimed and was given and
+nothing else, and `dtest iommu` holds the kernel to it, with `edu` started;
+a driver that does DMA is tried there after a change — the disk's own
+among them now — and so is the kernel after a change to who owns memory.
+The ATA driver met that machine first, before there was a device manager to
+start it only for an IDE controller: nothing at its ports answers 0xFF,
+which looked like a drive that was always busy.
 
 `VIRTIO=1` gives the machine the devices a virtual machine is usually
 given instead of the ones a PC had: its disk on virtio (`virtio-blk-pci`)
