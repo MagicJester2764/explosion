@@ -307,11 +307,12 @@ distribution makes of it:
   makes it: nothing mounts a disc's.
 - **More than one user means sessions on a terminal.** A terminal is its
   session's and each login is a session, so what one user leaves running
-  cannot read what the next types; the plain console has no notion of whose
-  it is. The disc and what it installs say `session /usr/bin/getty`
-  (`live/etc/init.conf`); an image built here with no overlay starts on the
-  console, which keeps both paths under test and is not somewhere to put a
-  second user.
+  cannot read what the next types, nor write on their screen. The plain
+  console keeps what is typed at it for whoever is logged in there — the
+  seat's — but draws whatever anybody writes down its pipe. The disc and
+  what it installs say `session /usr/bin/getty` (`live/etc/init.conf`); an
+  image built here with no overlay starts on the console, which keeps both
+  paths under test and is not somewhere to put a second user.
 - **Root's home is 0700**, in an image (`tools/populate-ext.sh`) and in what
   `qpkg strap` makes (`dir 0700 home/root`). Both, or one of the two kinds
   of system has a home anybody can read.

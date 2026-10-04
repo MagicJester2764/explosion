@@ -290,9 +290,11 @@ boot` shows what that server holds, the way it shows any program's.
 What somebody types is theirs too. Each login is a session, a terminal is
 the session's that has it, and a program somebody left running when they
 logged out cannot read what the next person types or open the terminal by
-its name. That is true of a terminal — which an installed system's sessions
-are on — and not of the plain console an image built with no `init.conf`
-starts on, which hands a typed line to whoever asks.
+its name. Nor can it take the keyboard, the mouse or the screen: those are
+the person's logged in at the console. That is all true of a terminal —
+which an installed system's sessions are on. The plain console an image
+built with no `init.conf` starts on keeps what is typed for whoever is
+logged in at it, and draws whatever anybody writes to it.
 
 `user add NAME` and `user remove NAME` make and take away accounts; the
 Unix-named tools (`useradd`, `groupadd`, `gpasswd`) are there too, for
