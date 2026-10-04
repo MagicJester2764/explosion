@@ -24,6 +24,10 @@
 # to give for that display, and the screen is the driver's from the start.
 # `NVME=1` puts the disk on an NVMe controller (`nvme`) instead, which the
 # firmware starts from as from any disk and the NVMe driver serves.
+# `NIC` is the network card, where `VIRTIO=1` does not say it: `rtl8139`
+# unless said otherwise; `e1000`, the 82540EM a PC in QEMU is usually
+# given; or `e1000e`, the 82574L of the q35 machine, which interrupts by
+# message.
 # `USB=1` is a machine whose keyboard and mouse are USB's and nothing
 # else's: q35 with no i8042 (`i8042=off`), and an xHCI controller with a
 # keyboard, a mouse and a disk on it — `STICK`, a FAT image, made with a
@@ -81,7 +85,7 @@ if [ -n "$ISO" ]; then
 else
     DRIVES=$(disk "${IMG:-hdimage.bin}")
 fi
-NIC=rtl8139
+NIC=${NIC:-rtl8139}
 [ -n "$VIRTIO" ] && NIC=virtio-net-pci
 # The virtio GPU's display can be asked to be another size as a viewer
 # whose window was made another size asks: through a VNC socket, which a

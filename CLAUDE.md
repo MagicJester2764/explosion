@@ -186,6 +186,11 @@ a script types reaches it through the USB keyboard, which is the keyboard's
 test; `lsusb`, `mousetest`, and the disk mounted, read, pulled out and put
 back are the rest (the acceptance's `e4-usb`).
 
+`NIC=e1000` or `NIC=e1000e` gives the machine one of Intel's gigabit cards
+where it would have the RTL8139: the 82540EM a PC in QEMU is usually given,
+or the 82574L of the q35 machine, which interrupts by message. The device
+manager starts `e1000` for either.
+
 `NVME=1` puts the disk on an NVMe controller (`-device nvme`) instead: the
 firmware starts from it as from any disk, and from there on it is the NVMe
 driver's, in the boot image. With `IOMMU=1` the controller is behind the
