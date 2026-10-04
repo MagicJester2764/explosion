@@ -43,10 +43,12 @@ OUT=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
 {
-    # /dev is the VFS's, but listing / should show it. /mnt is where
-    # something is mounted for a while, and /tmp is anybody's to write in
-    # and only a file's owner's to remove from.
-    printf 'mkdir dev\nmkdir home\nmkdir home/root\nmkdir tmp\nmkdir mnt\n'
+    # /dev and /proc are the VFS's, but listing / should show them, and the
+    # VFS finds them by their directories. /mnt is where something is
+    # mounted for a while, and /tmp is anybody's to write in and only a
+    # file's owner's to remove from.
+    printf 'mkdir dev\nmkdir proc\nmkdir home\nmkdir home/root\nmkdir tmp\nmkdir mnt\n'
+    printf 'set_inode_field proc mode 040555\n'
     printf 'set_inode_field tmp mode 041777\n'
     # Root's home is root's: nobody else's to look in.
     printf 'set_inode_field home/root mode 040700\n'
