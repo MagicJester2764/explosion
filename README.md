@@ -72,6 +72,8 @@ stage/boot/           essential services, packed into boot.img      (quarkutils)
 stage/usr/bin/        everything else, packed into the root         (quarkutils)
 stage/etc/            passwd                                        (quarkutils)
 stage/bin/sh          the shell, where a program looks for one      (here)
+stage/lib/ld-musl-x86_64.so.1   the C library, where a program built
+                      for Linux's musl looks for its loader         (here)
 stage/BOOTX64.EFI     Bang itself, installed to the ESP             (bang)
 stage/usr/bin/qpkg, bang-install, guide                             (here)
 stage/usr/lib/explosion/boot/   what the firmware starts, again     (here)

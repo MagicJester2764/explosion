@@ -133,10 +133,15 @@ stage: FORCE
 	@# linked to it asks for its loader by — a copy rather than a link, as
 	@# /bin/sh is, because FAT32 has none. musl's loader takes a program's
 	@# libc.so to be itself, so the two are never both loaded.
+	@# And under the name a program linked for Linux's musl asks for its
+	@# loader by, in /lib: such a program runs here, the system calls its own
+	@# code makes answered by the C library, which its loader tells it it is
+	@# one of (QUARK_AT_LINUX, in quarkutils).
 	@if [ -f $(MUSL_PREFIX)/lib/libc.so ]; then \
-		mkdir -p $(STAGE)/usr/lib; \
+		mkdir -p $(STAGE)/usr/lib $(STAGE)/lib; \
 		cp $(MUSL_PREFIX)/lib/libc.so $(STAGE)/usr/lib/libc.so; \
 		cp $(MUSL_PREFIX)/lib/libc.so $(STAGE)/usr/lib/ld-musl-x86_64.so.1; \
+		cp $(MUSL_PREFIX)/lib/libc.so $(STAGE)/lib/ld-musl-x86_64.so.1; \
 	fi
 	@for p in $(PROGRAMS); do \
 		(cd programs/$$p && cargo build --release) || exit 1; \
@@ -232,10 +237,10 @@ $(ROOTFS_IMG): stage
 	mmd -i $(ROOTFS_IMG) ::/dev
 	mmd -i $(ROOTFS_IMG) ::/proc
 	@cd $(STAGE) && \
-	find bin usr etc home -mindepth 0 -type d | sort | while read d; do \
+	find bin lib usr etc home -mindepth 0 -type d 2>/dev/null | sort | while read d; do \
 		mmd -i $(CURDIR)/$(ROOTFS_IMG) "::$$d" 2>/dev/null || true; \
 	done; \
-	find bin usr etc home -type f | while read f; do \
+	find bin lib usr etc home -type f 2>/dev/null | while read f; do \
 		mcopy -i $(CURDIR)/$(ROOTFS_IMG) "$$f" "::$$f"; \
 	done
 

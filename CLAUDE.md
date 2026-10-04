@@ -333,7 +333,13 @@ distribution makes of it:
   linked to the C library as a shared object (`-dynamic`, in
   `../quark-toolchain`); the stage puts that `libc.so` in `/usr/lib`, and a
   copy under the loader's name a program asks for
-  (`ld-musl-x86_64.so.1`) — a copy, because FAT32 has no links.
+  (`ld-musl-x86_64.so.1`) — a copy, because FAT32 has no links. And a
+  third, `/lib/ld-musl-x86_64.so.1`, the name a program built for Linux's
+  musl asks for: such a program runs here, the system calls its own code
+  makes answered by the C library, which its loader tells it it is one of
+  (quarkutils' `CLAUDE.md`, *Shared libraries*). `lib` is one of the
+  stage's top directories, with `bin`, `usr`, `etc` and `var`, wherever the
+  root and the packages are made from them.
 - **Anything built for musl installs into musl's prefix**, never the sysroot.
   Two C libraries sharing an include directory is `-I` beating `-isystem`, and
   `<fcntl.h>` resolving to the wrong one.
