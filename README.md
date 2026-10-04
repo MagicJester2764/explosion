@@ -131,9 +131,10 @@ out.
 A session has a bus when it asks for one. `dbus-run-session` starts a bus
 for a command and ends it with the command — `dbus-run-session wm
 weston-terminal`, and everything the compositor starts is on the bus — as
-on any system whose session nothing else starts one for. A GTK program
-there registers its application on the bus, and `gdbus` and `dbus-send`
-call whatever is on it. The bus takes a connection from its own user only.
+on any system whose session nothing else starts one for. `dbus-send` and
+GLib's `gdbus` call whatever is on it, and a GTK program reaches it through
+the same GDBus as `gdbus`, which can own a name there as an application's
+registration does. The bus takes a connection from its own user only.
 What tells two machines apart, `/etc/machine-id`, is made by `init` the
 first time a system starts, so an installation is a machine of its own and
 not the image it was made from.
