@@ -166,6 +166,19 @@ how much is written out, and how much has gone out and come back since the
 machine was started. It is not started unless a line says so: an
 installation disc runs from memory, and a file there is memory too.
 
+A program that is to be kept running is a `service` line: a name, the
+services it needs, the name it is up once it has registered, and what is
+done when it ends — started again when it fails, unless it says otherwise.
+`init` starts each once what it needs is up, starts it again if it fails, and
+answers `svc`, which says what every service is doing and what it has
+printed lately; everything a service prints is also in `/var/log/messages`.
+
+```
+service NAME [needs=A,B] [restart=always|on-failure|never] [register=X] PATH [ARGUMENT...]
+```
+
+`../quarkutils/docs/services.md` says it whole.
+
 ## Installing
 
 `make iso` makes the installation disc, and `docs/install.md` is how it is
