@@ -3,11 +3,16 @@
 
     ./echo-server.py [port]            # 7007 if not given
 
-QEMU's user network shows the host's loopback to the guest as 10.0.2.2, so a
-program on Quark reaches this at 10.0.2.2:<port>. boot-test.sh starts one if
-none is listening and leaves it running — every run there is at once uses the
-one — which is what lets a test of the network server check that what it sent
-came back. Stop it by hand when there is nothing left to test.
+QEMU's user network shows the host's loopback to the guest as 10.0.2.2, and
+over IPv6 as fec0::2, so a program on Quark reaches this at 10.0.2.2:<port>
+and [fec0::2]:<port>. boot-test.sh starts one if none is listening and leaves
+it running — every run there is at once uses the one — which is what lets a
+test of the network server check that what it sent came back. Stop it by hand
+when there is nothing left to test.
+
+Each family is listened on by itself: one that another echo server has
+already, or that this machine has no loopback for, is left to it, and a
+server that has neither ends by itself.
 
 TCP connections are echoed until the client closes; datagrams are sent back to
 whoever sent them, a moment later.
@@ -35,10 +40,11 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def udp():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(("127.0.0.1", PORT))
+class Server6(Server):
+    address_family = socket.AF_INET6
+
+
+def udp(s):
     while True:
         data, peer = s.recvfrom(65536)
         # Quark's network server keeps no datagram for a reader that has not
@@ -47,6 +53,21 @@ def udp():
         s.sendto(data, peer)
 
 
-threading.Thread(target=udp, daemon=True).start()
-with Server(("127.0.0.1", PORT), Echo) as server:
-    server.serve_forever()
+listening = 0
+for family, host, kind in ((socket.AF_INET, "127.0.0.1", Server), (socket.AF_INET6, "::1", Server6)):
+    try:
+        tcp = kind((host, PORT), Echo)
+    except OSError:
+        continue
+    threading.Thread(target=tcp.serve_forever, daemon=True).start()
+    listening += 1
+    try:
+        s = socket.socket(family, socket.SOCK_DGRAM)
+        s.bind((host, PORT))
+    except OSError:
+        continue
+    threading.Thread(target=udp, args=(s,), daemon=True).start()
+
+if not listening:
+    sys.exit(0)
+threading.Event().wait()

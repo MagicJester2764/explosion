@@ -4,6 +4,8 @@
 #   power    turn the machine off, and restart it
 #   tasks    end any program, whoever's
 #   become   run a command as another user with one's own password (`as`)
+#   clock    set the date
+#   network  say how the network treats what comes in (`netctl filter`)
 #   all      everything, the right to say who anybody is among it
 #
 # An account with no line has none of them, unless it is root, which has
