@@ -325,9 +325,14 @@ distribution makes of it:
   kind, and it patches autoconf's list of operating systems rather than the
   package. fontconfig carries one small patch from before the rule;
   coreutils did, and is built without it now (`coreutils-musl.mk`).
-- **Static, and not PIC.** There is no dynamic loader. meson builds take
-  `meson-cross-quark.ini`, cmake takes `cmake-cross-quark.cmake`, and the
-  compiler wrapper drops `-fPIC` and `-pthread` whatever a build asks for.
+- **Static.** meson builds take `meson-cross-quark.ini`, cmake takes
+  `cmake-cross-quark.cmake`, and nothing is built as a shared library. The
+  compiler wrapper drops `-pthread` and keeps `-fPIC` in the small code
+  model, which a static program links as well as any. A program can be
+  linked to the C library as a shared object (`-dynamic`, in
+  `../quark-toolchain`); the stage puts that `libc.so` in `/usr/lib`, and a
+  copy under the loader's name a program asks for
+  (`ld-musl-x86_64.so.1`) — a copy, because FAT32 has no links.
 - **Anything built for musl installs into musl's prefix**, never the sysroot.
   Two C libraries sharing an include directory is `-I` beating `-isystem`, and
   `<fcntl.h>` resolving to the wrong one.

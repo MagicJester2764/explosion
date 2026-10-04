@@ -73,6 +73,9 @@ WAYLAND_CLIENTS ?=
 # `toolchain/build-tests.sh` and the port build scripts. Space-separated; each
 # contributes its executables to /usr/bin and its `*.tests` files to /etc.
 TEST_SUITES     ?=
+# The C library as a shared object, for a program linked to it (-dynamic):
+# what ../quark-toolchain's build-musl.sh installed.
+MUSL_PREFIX     ?= $(HOME)/opt/cross/x86_64-quark/musl
 
 # Directories laid out like the root filesystem — usr/share/fonts, etc/fonts,
 # var/cache — as made by `toolchain/stage-fonts.sh` and the port build
@@ -120,6 +123,15 @@ stage: FORCE
 	$(MAKE) -C $(QUARKUTILS_DIR) install DESTDIR=$(CURDIR)/$(STAGE) REQUIRE_ABI=1
 	$(MAKE) -C $(BANG_DIR) build
 	@cp $(BANG_DIR)/BOOTX64.EFI $(STAGE)/BOOTX64.EFI
+	@# The C library as a shared object, and again under the name a program
+	@# linked to it asks for its loader by — a copy rather than a link, as
+	@# /bin/sh is, because FAT32 has none. musl's loader takes a program's
+	@# libc.so to be itself, so the two are never both loaded.
+	@if [ -f $(MUSL_PREFIX)/lib/libc.so ]; then \
+		mkdir -p $(STAGE)/usr/lib; \
+		cp $(MUSL_PREFIX)/lib/libc.so $(STAGE)/usr/lib/libc.so; \
+		cp $(MUSL_PREFIX)/lib/libc.so $(STAGE)/usr/lib/ld-musl-x86_64.so.1; \
+	fi
 	@for p in $(PROGRAMS); do \
 		(cd programs/$$p && cargo build --release) || exit 1; \
 		cp programs/$$p/target/x86_64-unknown-none/release/$$p $(STAGE)/usr/bin/$$p; \
@@ -165,7 +177,8 @@ stage: FORCE
 		fi; \
 	fi
 	@# A test suite is a directory of programs and the lists runtests reads.
-	@# Programs go where commands go; a list goes to /etc under its own name.
+	@# Programs go where commands go; a list goes to /etc under its own name;
+	@# a shared library a test is linked to or opens goes where libraries are.
 	@for d in $(TEST_SUITES); do \
 		n=0; \
 		for f in $$d/*; do \
@@ -174,6 +187,9 @@ stage: FORCE
 			case "$$b" in \
 			*.tests) cp "$$f" $(STAGE)/etc/$$b; \
 			   echo "etc/$$b" >> $(STAGE)/.suites ;; \
+			lib*.so) mkdir -p $(STAGE)/usr/lib; \
+			   cp "$$f" $(STAGE)/usr/lib/$$b; \
+			   echo "usr/lib/$$b" >> $(STAGE)/.suites ;; \
 			*) [ -x "$$f" ] || continue; \
 			   cp "$$f" $(STAGE)/usr/bin/$$b; \
 			   echo "usr/bin/$$b" >> $(STAGE)/.suites; \
