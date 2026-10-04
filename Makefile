@@ -90,6 +90,12 @@ ROOT_OVERLAYS   ?=
 # and assembling the image that does should not need a cross compiler.
 FSTOOLS         ?= fstools
 
+# D-Bus: the session's message bus and its tools, as `toolchain/build-dbus.sh`
+# leaves them. On by default and tracked, as FSTOOLS is: what a desktop's
+# programs find each other through belongs in the system, not in a build of
+# somebody's.
+DBUS            ?= dbus
+
 # What makes an installation disc of a system: how it greets, and a session
 # on a terminal. Staged for `make iso` and nothing else.
 LIVE_OVERLAY    :=
@@ -199,7 +205,7 @@ stage: FORCE
 		done; \
 		echo "tests: staged $$n programs from $$d"; \
 	done
-	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
+	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(DBUS) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
 	@# Nearly last, since it lists every program the stage now has.

@@ -9,7 +9,8 @@
 # build-weston-toytoolkit.sh links against weston's build tree.
 #
 # The program is `examples/hello/hello-world.c` from GTK's own documentation:
-# somebody else's program, against somebody else's toolkit, unmodified.
+# somebody else's program, against somebody else's toolkit, unmodified. Beside
+# it goes GLib's `gdbus`, as build-glib.sh made it.
 set -e
 
 SRC=${1:?usage: build-gtk-client.sh <gtk-src> [outdir]}
@@ -68,3 +69,10 @@ echo "==> $NAME"
 x86_64-quark-musl-gcc -O2 -Wl,--strip-debug -Wl,--allow-multiple-definition \
     -o "$OUT/$NAME" "$PROG" $INC $LIBS
 echo "built $OUT/$NAME"
+
+# And GLib's own client for a session's bus, which build-glib.sh made with
+# the rest of GIO: `gdbus call` is how a person asks a GTK program — or the
+# bus — something, and how the system checks that GDBus can be heard.
+echo "==> gdbus"
+x86_64-quark-strip -o "$OUT/gdbus" "$PREFIX/bin/gdbus"
+echo "built $OUT/gdbus"

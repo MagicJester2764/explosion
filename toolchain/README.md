@@ -19,6 +19,7 @@ In the order they need each other:
 | The toolkit | `bootstrap-toolkit.sh`, then `build-pcre2.sh`, `-glib`, `-harfbuzz`, `-fribidi`, `-pango`, `-graphene`, `-libjpeg`, `-libtiff`, `-gdk-pixbuf`, `-epoxy`, `install-egl-headers.sh`, `build-wayland-protocols.sh`, `build-gtk.sh`, `build-gtk-client.sh`, `stage-xkb.sh` | GTK 4, and `hello-world` |
 | The console's font | `stage-unifont.sh` | GNU Unifont, as an overlay: what the console draws past ASCII |
 | Filesystems | `build-e2fsprogs.sh`, `build-dosfstools.sh` | `mkfs.ext4`, `mkfs.ext2`, `e2fsck`, `mkfs.fat`, `fsck.fat`, in `../fstools` |
+| A session's bus | `build-dbus.sh`, after expat; then `build-gtk-client.sh` again, for GLib's `gdbus` | D-Bus — `dbus-daemon`, `dbus-send`, `dbus-run-session` and the rest — in `../dbus`, and `libdbus-1.a` |
 | Tests | `build-tests.sh` | the ports' own tests, as a `TEST_SUITES` directory |
 
 Sources live under `$QUARK_SRC` (`~/opt/src`), the compiler under `~/opt/cross`,
@@ -413,6 +414,34 @@ What each needed:
 
 A toolkit program is twenty-five megabytes and is in memory twice while it
 starts, so QEMU is given a gigabyte and the root filesystem is 128 MiB.
+
+## D-Bus
+
+`build-dbus.sh` builds D-Bus 1.16.2, unpatched, from its tarball: the
+message bus a desktop's programs find each other on. Its programs go into
+`../dbus`, which is tracked and staged into every image as `fstools/` is,
+and `libdbus-1.a` into musl's prefix for what is built against it.
+
+    ./toolchain/build-dbus.sh ~/opt/src/dbus-1.16.2.tar.xz
+
+It is configured for the paths it runs at, because libdbus compiles them in,
+and it builds as a Unix that is not Linux — Quark's compiler defines no
+`__linux__`. That decides what it does: it polls with `poll(2)` (its epoll
+backend is Linux's alone, by `#error`), makes the session's socket on a path
+in `/tmp` (there is no abstract namespace), and asks the socket who is
+connecting (`SO_PEERCRED`, which the C layer answers for a local socket).
+There is no system bus.
+
+What it needed of Quark was there before it came — local sockets that say
+who is at the other end, `poll`, `fork` and `exec` — except a machine id,
+which `init` makes now, the first time a system starts.
+
+GLib's GDBus is the other half, and needed one line of D-Bus's own
+configuration rather than anything of Quark's: it says who it is by
+EXTERNAL only where GLib knows how a platform passes credentials, and Quark
+is not one it knows, so the session bus also takes DBUS_COOKIE_SHA1
+(`etc/dbus-1/session.d/quark.conf`). `build-gtk-client.sh` puts GLib's
+`gdbus` beside `hello-world`.
 
 
 ## Tests, and the two fuzzers

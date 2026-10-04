@@ -119,11 +119,24 @@ its files back out. Programs are stripped on the way in, which needs
 `x86_64-quark-strip` on `PATH`; without it they go in unstripped and the root
 fills up.
 
-One port is in every image, and its programs are tracked here: `fstools/`
-holds `mkfs.ext4`, `mkfs.ext2`, `mkfs.fat` and the two checkers, `e2fsck` and
-`fsck.fat` — e2fsprogs and dosfstools, unpatched. A system that cannot make a
-filesystem cannot install itself, and assembling the image that does should
-not need a cross compiler. `FSTOOLS=` leaves them out.
+Two ports are in every image, and their programs are tracked here.
+`fstools/` holds `mkfs.ext4`, `mkfs.ext2`, `mkfs.fat` and the two checkers,
+`e2fsck` and `fsck.fat` — e2fsprogs and dosfstools, unpatched. A system that
+cannot make a filesystem cannot install itself, and assembling the image
+that does should not need a cross compiler. `FSTOOLS=` leaves them out.
+`dbus/` holds D-Bus, unpatched (`toolchain/build-dbus.sh`): the message bus
+a desktop's programs find each other on, and its tools. `DBUS=` leaves it
+out.
+
+A session has a bus when it asks for one. `dbus-run-session` starts a bus
+for a command and ends it with the command — `dbus-run-session wm
+weston-terminal`, and everything the compositor starts is on the bus — as
+on any system whose session nothing else starts one for. A GTK program
+there registers its application on the bus, and `gdbus` and `dbus-send`
+call whatever is on it. The bus takes a connection from its own user only.
+What tells two machines apart, `/etc/machine-id`, is made by `init` the
+first time a system starts, so an installation is a machine of its own and
+not the image it was made from.
 
 After the overlays, staging builds fontconfig's caches for whatever fonts are
 there (`tools/stage-font-caches.sh`), and writes `/etc/hostile.tests`: every

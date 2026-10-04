@@ -351,4 +351,15 @@ distribution makes of it:
 - **`clients/` holds built programs, and they are tracked**, so that an image
   with a compositor's clients in it can be assembled on a machine with no
   cross toolchain. Rebuilding one means running its script in `toolchain/`
-  again and committing the result.
+  again and committing the result. `fstools/` and `dbus/` are the same, for
+  the ports every image carries.
+- **A session bus takes GLib's programs by cookie.** GDBus says who it is by
+  EXTERNAL only where GLib knows how the platform passes credentials, which
+  it decides by macro; it does not know Quark, says it is user -1, and is
+  refused by D-Bus's default, EXTERNAL alone. `build-dbus.sh` writes the
+  bus's one line of configuration that also takes DBUS_COOKIE_SHA1
+  (`etc/dbus-1/session.d/quark.conf`), which proves the same user by a file
+  in a home nobody else may read. libdbus's programs still use EXTERNAL,
+  which the bus checks against the socket (`SO_PEERCRED`). Neither package
+  is changed; the way out that patches nothing else — GIO compiled told it
+  is Linux — would bring GLib's netlink and its other Linux paths with it.
