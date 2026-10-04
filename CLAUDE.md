@@ -196,6 +196,14 @@ firmware starts from it as from any disk, and from there on it is the NVMe
 driver's, in the boot image. With `IOMMU=1` the controller is behind the
 IOMMU, its queues among what its driver was given.
 
+`AUDIO=1` gives the machine a sound card, Intel's HD audio with a codec
+that plays (`intel-hda`, `hda-output`), and has QEMU write what it plays to
+"$RUN/audio.wav". `tools/wav-tone.py "$RUN/audio.wav" 440 660`, from a
+script's `run` step, says whether those tones were played together: the
+loudest tenth of a second must be mostly them, and a tone between them,
+which nobody played, must not be there. `play -t 440 660` is what plays
+them, through the mixer (the acceptance's `e4-plain`).
+
 `crash-test.sh` stops the machine with three things on the disk — a removed
 file a program still holds, a file written and synced, and, on ext4, a
 directory being changed as it stops — and recovers the disk twice: with

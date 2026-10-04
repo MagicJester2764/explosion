@@ -34,6 +34,10 @@
 # file on it (`HELLO.TXT`) if it is not there. With `HUB=1` the keyboard and
 # the mouse are behind a hub. Whatever a script types reaches the machine
 # through the USB keyboard, and what it points with through the mouse.
+# `AUDIO=1` gives the machine a sound card: Intel's HD audio, with a codec
+# behind it that plays (`intel-hda`, `hda-output`), whose output QEMU writes
+# to "$RUN/audio.wav" as it is played. `tools/wav-tone.py` says which tones
+# are in it, from a script's `run` step while the machine is still going.
 # `MEM` is how much memory: a gigabyte unless said otherwise. `MEM=6G` is a
 # machine with memory above four gigabytes, which is a different machine to
 # start on: the firmware loads the bootloader up there, the kernel has more
@@ -103,6 +107,10 @@ if [ -n "$IOMMU" ]; then
 elif [ -n "$USB" ]; then
     CHIPSET="-machine $MACHINE"
 fi
+AUDIODEVS=
+if [ -n "$AUDIO" ]; then
+    AUDIODEVS="-audiodev wav,id=snd,path=$RUN/audio.wav,out.frequency=48000 -device intel-hda -device hda-output,audiodev=snd"
+fi
 USBDEVS=
 if [ -n "$USB" ]; then
     STICK=${STICK:-$RUN/stick.img}
@@ -125,7 +133,7 @@ if [ -n "$USB" ]; then
 fi
 
 [ -f "$RUN/qemu.pid" ] && kill "$(cat "$RUN/qemu.pid")" 2>/dev/null
-rm -f "$RUN/qmp.sock" "$RUN/vnc.sock" "$RUN/serial.log" "$2"
+rm -f "$RUN/qmp.sock" "$RUN/vnc.sock" "$RUN/serial.log" "$RUN/audio.wav" "$2"
 
 cd "$TOP"
 # The firmware writes its variable store, and the one in bang is tracked. Boot
@@ -144,7 +152,7 @@ qemu-system-x86_64 $(test -w /dev/kvm && echo -enable-kvm) -cpu "${CPU:-max}" -s
   -L ../bang/firmware-redist/ovmf/ \
   -pflash ../bang/firmware-redist/ovmf/OVMF_CODE.fd \
   -pflash "$RUN/OVMF_VARS.fd" \
-  $DRIVES $USBDEVS $DISPLAY_DEVICE -display none \
+  $DRIVES $USBDEVS $AUDIODEVS $DISPLAY_DEVICE -display none \
   -device $NIC,netdev=n -netdev user,id=n \
   -device edu \
   -qmp unix:"$RUN/qmp.sock",server,nowait \
