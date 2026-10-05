@@ -1,0 +1,29 @@
+# What cargo is told on a system that builds itself.
+#
+# rust-lld cannot run here: it is linked at 0x400000, below where Quark maps
+# anything. GNU ld links what rustc makes for Quark's own targets — the
+# kernel's and the no_std programs' (x86_64-unknown-none), the hosted
+# programs' (x86_64-unknown-quark) — with the same arguments, the projects'
+# own link scripts among them. What rustc makes for this system itself, its
+# build scripts and its macros, is linked by cc as a program or a library
+# linked to Quark's C library: not the musl rustc carries, whose system
+# calls are Linux's.
+#
+# Cargo joins this with each project's own configuration, arrays and all.
+
+[target.x86_64-unknown-none]
+linker = "ld"
+rustflags = ["-C", "linker-flavor=ld"]
+
+[target.x86_64-unknown-quark]
+linker = "ld"
+rustflags = ["-C", "linker-flavor=ld"]
+
+[target.x86_64-unknown-linux-musl]
+linker = "cc"
+rustflags = ["-C", "target-feature=-crt-static"]
+
+# Crates come from what was fetched before the image was made: there is no
+# registry to reach from here.
+[net]
+offline = true

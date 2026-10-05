@@ -1,0 +1,32 @@
+# What `configure` would find out by running a program on Quark, for the
+# GNU programs build-gnu-tools.sh builds. It cannot run one from here, so it
+# guesses for a system it has never heard of; these are the guesses that
+# are wrong for musl or for Quark, and a wrong one does not fail, it
+# compiles.
+
+# bash. Told nothing, it decides a child's exit status is in the low byte
+# of a wait status, and every command it runs has succeeded.
+bash_cv_wexitstatus_offset=8
+# What it would otherwise do without, or do itself worse: getcwd allocates,
+# there is no sbrk to manage memory by, printf has %a, strchrnul and strcoll
+# work, mktime works, chown works.
+bash_cv_getcwd_malloc=yes
+bash_cv_func_sbrk=no
+bash_cv_printf_a_format=yes
+bash_cv_func_strchrnul_works=yes
+ac_cv_func_strcoll_works=yes
+ac_cv_func_working_mktime=yes
+ac_cv_func_chown_works=yes
+# A pipeline's processes are in one group; /dev/fd and /dev/stdin are
+# there; named pipes are. Told none of it, process substitution and
+# `<(...)` are missing, and a pipeline is not one job.
+bash_cv_pgrp_pipe=yes
+bash_cv_dev_fd=standard
+bash_cv_dev_stdin=present
+bash_cv_sys_named_pipes=present
+
+# gnulib, in every one of them. Unsure of strcasecmp, it builds its own;
+# unsure of getgroups, it builds one that only ever fails — and a program
+# then believes a user is in fewer groups than they are.
+gl_cv_func_strcasecmp_works=yes
+ac_cv_func_getgroups_works=yes

@@ -52,11 +52,11 @@ trap 'rm -f "$CMDS" "$OUT" "$ERR"' EXIT
     printf 'set_inode_field tmp mode 041777\n'
     # Root's home is root's: nobody else's to look in.
     printf 'set_inode_field home/root mode 040700\n'
-    find bin lib usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
-    find bin lib usr etc var -type l 2>/dev/null | sort | while read -r l; do
+    find .cargo bin lib usr etc var -type d 2>/dev/null | sort | sed 's/^/mkdir /'
+    find .cargo bin lib usr etc var -type l 2>/dev/null | sort | while read -r l; do
         printf 'symlink %s %s\n' "$l" "$(readlink "$l")"
     done
-    find bin lib usr etc var -type f 2>/dev/null | sort | while read -r f; do
+    find .cargo bin lib usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'write %s %s\n' "$f" "$(target "$f")"
     done
 } > "$CMDS"
@@ -68,10 +68,10 @@ if grep -v '^debugfs [0-9]' "$ERR" >&2; then
 fi
 
 {
-    find bin lib usr etc var -type f 2>/dev/null | sort | while read -r f; do
+    find .cargo bin lib usr etc var -type f 2>/dev/null | sort | while read -r f; do
         printf 'stat %s\n' "$(target "$f")"
     done
-    find bin lib usr etc var -type l 2>/dev/null | sort | sed 's/^/stat /'
+    find .cargo bin lib usr etc var -type l 2>/dev/null | sort | sed 's/^/stat /'
 } > "$CMDS"
 debugfs -f "$CMDS" "$IMG" > "$OUT" 2>&1 || true
 # The error names the path. The command echo that precedes it on stdout is
@@ -85,7 +85,7 @@ fi
 # Times last, when nothing else will write into a directory and move its own.
 {
     for kind in f l d; do
-        find bin lib usr etc var -type "$kind" 2>/dev/null | sort | while read -r p; do
+        find .cargo bin lib usr etc var -type "$kind" 2>/dev/null | sort | while read -r p; do
             name=$p
             [ "$kind" = f ] && name=$(target "$p")
             t=$(stat -c %Y "$p")

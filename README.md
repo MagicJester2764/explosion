@@ -115,6 +115,7 @@ wherever it was built, by variable, and leaves it out by default:
 | `WAYLAND_CLIENTS=<dir>` | Every executable in the directory into `/usr/bin`, and its `share/` into `/usr/share`. `clients/` here is one: weston's clients, the small test clients, and GTK's `hello-world`. |
 | `TEST_SUITES="<dir> …"` | Each directory's programs into `/usr/bin` and its `*.tests` lists into `/etc`, for `runtests`. |
 | `ROOT_OVERLAYS="<dir> …"` | Trees laid out like the root — fonts, their configuration, keyboard data — copied over the stage as they are. |
+| `TOOLCHAIN="<dir> …"` | The development set, trees laid out like the root: the C and C++ compilers that run on Quark (`../quark-toolchain`'s `build-native.sh`, `~/opt/native`), Rust's compiler and cargo (its `rust-native.sh`, `~/opt/native-rust`), and the GNU programs a build runs (`toolchain/build-gnu-tools.sh`). The root is four gigabytes with it, and sparse where it is built. |
 
 Each is recorded as it is staged, so building again without the variable takes
 its files back out. Programs are stripped on the way in, which needs

@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from readmanifest import describe, find_all  # noqa: E402
 
 # What an image is filled from; populate-ext.sh's list.
-TOPS = ("bin", "lib", "usr", "etc", "var")
+TOPS = (".cargo", "bin", "lib", "usr", "etc", "var")
 DB = "var/lib/qpkg"
 
 

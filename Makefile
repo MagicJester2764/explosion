@@ -37,7 +37,10 @@ PROGRAMS := qpkg bang-install guide user as
 # Room for the fonts and the font stack's programs and tests; 33 MiB was
 # nearly full without them, and 64 MiB filled up the moment a program linked
 # glib statically -- one of those is four megabytes on its own.
-ROOTFS_SIZE_KB  := 131072
+# The root: 128 MiB, and four gigabytes for an image that carries the
+# development set (TOOLCHAIN, below) — the better part of one for the
+# compilers and the rest to build in.
+ROOTFS_SIZE_KB  := $(if $(strip $(TOOLCHAIN)),4194304,131072)
 # The services started before there is a root, the drivers of the disks a
 # root can be on and of the network cards among them: a megabyte was full
 # once the cards' drivers came out of the network server.
@@ -95,6 +98,16 @@ FSTOOLS         ?= fstools
 # programs find each other through belongs in the system, not in a build of
 # somebody's.
 DBUS            ?= dbus
+
+# The development set: compilers that run on the system, and the programs a
+# build runs. Directories laid out like the root, staged as they are:
+# ../quark-toolchain's build-native.sh (gcc, g++ and binutils, and what they
+# compile against) and rust-native.sh (rustc and cargo, under /usr), and
+# toolchain/build-gnu-tools.sh's (bash, make, sed, grep, gawk, diffutils,
+# findutils). Space-separated. Empty by default, as COREUTILS is: it is the
+# better part of a gigabyte of somebody else's build, and an image that
+# carries it has a root to fit.
+TOOLCHAIN       ?=
 
 # What makes an installation disc of a system: how it greets, and a session
 # on a terminal. Staged for `make iso` and nothing else.
@@ -210,7 +223,16 @@ stage: FORCE
 		done; \
 		echo "tests: staged $$n programs from $$d"; \
 	done
-	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(DBUS) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
+	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(DBUS) $(TOOLCHAIN) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
+	@# And with the development set, what cargo is told on this system
+	@# (devel/cargo-config.toml): cargo reads .cargo/config.toml in every
+	@# directory above a project, / among them, so there it holds for any
+	@# project of anybody's.
+	@if [ -n "$(strip $(TOOLCHAIN))" ]; then \
+		mkdir -p $(STAGE)/.cargo && cp devel/cargo-config.toml $(STAGE)/.cargo/config.toml; \
+	else \
+		rm -f $(STAGE)/.cargo/config.toml; \
+	fi
 	@# After the overlays, whose fonts and configuration it needs.
 	@./tools/stage-font-caches.sh $(STAGE)
 	@# Nearly last, since it lists every program the stage now has.
@@ -232,15 +254,16 @@ $(BOOT_IMG): stage
 # FAT32 root. Names keep their case here, and a long one gets a short alias
 # that is all Quark's FAT32 reads.
 $(ROOTFS_IMG): stage
-	dd if=/dev/zero of=$(ROOTFS_IMG) bs=1k count=$(ROOTFS_SIZE_KB) status=none
+	rm -f $(ROOTFS_IMG)
+	dd if=/dev/zero of=$(ROOTFS_IMG) bs=1k count=0 seek=$(ROOTFS_SIZE_KB) status=none
 	mformat -i $(ROOTFS_IMG) -F ::
 	mmd -i $(ROOTFS_IMG) ::/dev
 	mmd -i $(ROOTFS_IMG) ::/proc
 	@cd $(STAGE) && \
-	find bin lib usr etc home -mindepth 0 -type d 2>/dev/null | sort | while read d; do \
+	find .cargo bin lib usr etc home -mindepth 0 -type d 2>/dev/null | sort | while read d; do \
 		mmd -i $(CURDIR)/$(ROOTFS_IMG) "::$$d" 2>/dev/null || true; \
 	done; \
-	find bin lib usr etc home -type f 2>/dev/null | while read f; do \
+	find .cargo bin lib usr etc home -type f 2>/dev/null | while read f; do \
 		mcopy -i $(CURDIR)/$(ROOTFS_IMG) "$$f" "::$$f"; \
 	done
 
@@ -251,12 +274,17 @@ $(ROOTFS_IMG): stage
 # since debugfs speaks to either and the directory layout is the same. $(1) is
 # the image, $(2) the mkfs command.
 #
+# The file is made sparse, and the disk image dug out once it is assembled
+# (root_disk): a root of four gigabytes of which one is used takes one where
+# it is built, and a copy made with cp keeps the holes.
+#
 # The ext4 root carries a journal. 1 MiB is the smallest mke2fs will make with
 # 1 KiB blocks, and a transaction here is a dozen blocks, so the size is set by
 # what the tool allows rather than by what is needed.
 define ROOTFS_RULE
 $(1): stage
-	dd if=/dev/zero of=$(1) bs=1k count=$$(ROOTFS_SIZE_KB) status=none
+	rm -f $(1)
+	dd if=/dev/zero of=$(1) bs=1k count=0 seek=$$(ROOTFS_SIZE_KB) status=none
 	$(2) $(1)
 	./tools/populate-ext.sh $(1) $$(STAGE)
 endef
@@ -267,7 +295,10 @@ $(eval $(call ROOTFS_RULE,$(ROOTFS_EXT4_IMG),mkfs.ext4 -b 1024 -F -q -J size=1))
 # The EFI system partition: the loader, the kernel it loads, and the modules it
 # hands the kernel. boot.img rides along as a module. tools/make-esp.sh says
 # what goes in and writes the boot menu to match.
-ESP_KB   := $(shell expr $(ROOTFS_SIZE_KB) + 3072)
+# As big as the root and 3 MiB, up to what a default image's is: room for a
+# Linux kernel and its initrd beside Quark's, and nothing a bigger root
+# needs.
+ESP_KB   := $(shell r=$(ROOTFS_SIZE_KB); [ $$r -gt 131072 ] && r=131072; expr $$r + 3072)
 ESP_ENV   = SHELL_EFI="$(SHELL_EFI)" LINUX_KERNEL="$(LINUX_KERNEL)" INITRD="initrd.img"
 
 fat.img: stage $(BOOT_IMG)
@@ -293,6 +324,7 @@ define root_disk
 	printf 'root partuuid %s\n' "$$2" > root.cfg && \
 	mcopy -o -i $(HD_IMG)@@$$1 root.cfg ::/drivers/ROOT.CFG && \
 	rm -f root.cfg
+	@fallocate --dig-holes $(HD_IMG) 2>/dev/null || true
 endef
 
 hd: fat.img $(ROOTFS_EXT2_IMG)
