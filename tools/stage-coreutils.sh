@@ -56,6 +56,10 @@ for f in "$SRC"/*; do
     readelf -h "$f" 2>/dev/null | grep -q 'Entry point address: *0x80' || continue
 
     name=$(basename "$f")
+    # Its install is built as ginstall, a name it has only in the build tree,
+    # where install is the makefile's: installed, it is install, and a
+    # program's `make install` asks for it by that name.
+    [ "$name" = ginstall ] && name=install
     upper=$(echo "$name" | tr '[:lower:]' '[:upper:]')
     # The ext2 image lowercases every name it is given, so a program staged as
     # FOO.ELF and one called foo are the same file there.
