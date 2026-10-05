@@ -9,7 +9,24 @@
 # linked to Quark's C library: not the musl rustc carries, whose system
 # calls are Linux's.
 #
+# What runs here while something else is built is said twice. Building for
+# another target, cargo gives build scripts and macros a target table's
+# linker but never its rustflags: a build script was linked statically,
+# with the musl rustc carries, as a static PIE ld could not place. Nightly
+# cargo's host configuration says what they get instead ([host]), and
+# target-applies-to-host = false says it is what they get.
+#
 # Cargo joins this with each project's own configuration, arrays and all.
+
+target-applies-to-host = false
+
+[unstable]
+target-applies-to-host = true
+host-config = true
+
+[host]
+linker = "cc"
+rustflags = ["-C", "target-feature=-crt-static"]
 
 [target.x86_64-unknown-none]
 linker = "ld"
@@ -19,6 +36,7 @@ rustflags = ["-C", "linker-flavor=ld"]
 linker = "ld"
 rustflags = ["-C", "linker-flavor=ld"]
 
+# A program built for this system itself, when no target is named.
 [target.x86_64-unknown-linux-musl]
 linker = "cc"
 rustflags = ["-C", "target-feature=-crt-static"]
