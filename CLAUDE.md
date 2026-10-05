@@ -125,13 +125,14 @@ driver may not do.
 
 A machine has somewhere to write memory out to if its image starts `swapd`:
 `start /usr/bin/swapd /var/swap 16` in `/etc/init.conf`, and then `dtest
-pressure` has twenty-three more checks to make, the last of which fills more
-memory than the machine has. The file is on the root, which on an image
+pressure` has twenty-five more checks to make, the last of which fill more
+memory than the machine has: a program alone, and then four threads of one
+at once. The file is on the root, which on an image
 built here has about twenty megabytes to spare: sixteen is a file that
 would not fit if it were ever full, and never is — it is as long as the
 most that was out at once, which the checks keep under two. It is written a
 page at a time through the file server to a disk driven a word at a time;
-that last check takes about ten seconds. `swapd` and `free` are `system`'s,
+each of those last takes about ten seconds. `swapd` and `free` are `system`'s,
 like any other program of the userland's: on every installed system, and
 started on none unless its `init.conf` says so.
 
