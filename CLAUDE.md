@@ -226,6 +226,15 @@ runs; the made disk finds it every time.
 - **Run it on ext2 and on ext4** after anything that changes how the file
   server or the disk driver writes, and read the count: a run in which no
   stop found a committed transaction has not tried replay, and says so.
+- **A disk the server recovered is judged with its journal replayed.** The
+  machine is quit at its login prompt, and the system log writes as it
+  starts: once in many runs the quit fell between a transaction of the
+  server's own and its checkpoint, and `e2fsck -n`, which cannot replay a
+  journal, took the bitmap in place and the inode still in the journal for
+  damage. What the server left is replayed with `debugfs` — which frees no
+  orphan, where `e2fsck -E journal_only` would — and only what is its own,
+  numbered past every transaction committed when it started: one from
+  before was its to replay, and is named as still in the journal.
 
 A keys file is one operation per line (`tools/drive-qemu.py` has the list):
 `sleep`, `type`, `key`, `move dx dy [n]`, `click`, `press`, `release`, `wheel`,

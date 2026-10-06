@@ -38,6 +38,17 @@
 # the replay wrote that back with the orphan, undid the transaction in the
 # counts and left the new directory's inode and block free in the bitmaps.
 #
+# A machine started to recover a disk is quit at its login prompt, which can
+# be between a transaction of the server's own — the system log writes as
+# it starts — and that transaction's checkpoint: the bitmap in place, say,
+# and the inode that owns the block it gives still only in the journal.
+# That is a journal to replay, as a mount replays it, and not damage, and
+# `e2fsck -n` cannot replay one. So what the server left in its journal is
+# replayed first, with debugfs, which does nothing else — e2fsck would free
+# the orphans the server should have — and only if it is the server's own:
+# numbered past every transaction that was committed when it started, each
+# of which was its to replay.
+#
 # Exits 1 if any recovery left damage or lost the synced file.
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
@@ -83,6 +94,42 @@ with open(sys.argv[2], 'r+b') as f:
     f.seek(first * 512)
     f.write(open(sys.argv[1], 'rb').read())
 PY
+}
+# The number of the first transaction a file server that mounts the disk in
+# $PART can write of its own: one past the last committed to its journal,
+# which the server has to replay first, or where the journal stands when
+# nothing is. 0 where there is no journal.
+journal_next() {
+    dumpe2fs -h "$PART" 2>/dev/null | grep -q has_journal || { echo 0; return; }
+    last=
+    if [ "$(dumpe2fs -h "$PART" 2>/dev/null | sed -n 's/^Journal start: *//p')" != 0 ]; then
+        last=$(debugfs -R logdump "$PART" 2>/dev/null \
+            | sed -n 's/^Found expected sequence \([0-9]*\), type 2 (commit block).*/\1/p' | tail -1)
+    fi
+    if [ -n "$last" ]; then
+        echo $((last + 1))
+    else
+        echo $(($(dumpe2fs -h "$PART" 2>/dev/null | sed -n 's/^Journal sequence: *//p')))
+    fi
+}
+# What a file server stopped as it ran left in the journal of $PART:
+# nothing, or transactions of its own — numbered from $1 on — committed and
+# not yet where they belong, which are replayed as a mount would replay
+# them. One numbered before $1 was on the disk when the server started.
+journal_left() {
+    dumpe2fs -h "$PART" 2>/dev/null | grep -q needs_recovery || return 0
+    [ "$(dumpe2fs -h "$PART" 2>/dev/null | sed -n 's/^Journal start: *//p')" != 0 ] || return 0
+    seq=$(($(dumpe2fs -h "$PART" 2>/dev/null | sed -n 's/^Journal sequence: *//p')))
+    if [ "$seq" -lt "$1" ]; then
+        echo "   THE FILE SERVER DID NOT REPLAY ITS JOURNAL: transaction $seq is in it still"
+        return 1
+    fi
+    debugfs -w -R jr "$PART" >/dev/null 2>&1
+    if dumpe2fs -h "$PART" 2>/dev/null | grep -q needs_recovery; then
+        echo "   WHAT THE FILE SERVER LEFT IN ITS JOURNAL COULD NOT BE REPLAYED"
+        return 1
+    fi
+    echo "   stopped with a transaction of its own committed and not yet in place (from $seq): replayed, as a mount would"
 }
 # $RUN/crash-built.img: $IMG's filesystem with a removed file on the orphan
 # list, under a committed transaction that makes a directory.
@@ -240,6 +287,8 @@ fi
 # the orphans it frees goes to the screen, which is kept: user space never
 # reaches the serial line.
 served() {
+    root_of
+    next=$(journal_next)
     cat > "$SCRIPT" <<KEYS
 expect 120 ^login:\$
 shot $1
@@ -249,7 +298,11 @@ KEYS
         echo "   IT DID NOT REACH A LOGIN PROMPT; its screen: $1"
         STATUS=1
     }
-    if sh "$HERE/check-rootfs.sh" "$IMG" > "$PART.log" 2>&1; then
+    # Checked as check-rootfs.sh checks, on the root the server left with
+    # what it left in its journal replayed. The image keeps it unreplayed.
+    root_of
+    journal_left "$next" || STATUS=1
+    if e2fsck -fn "$PART" > "$PART.log" 2>&1; then
         tail -1 "$PART.log" | sed 's/^/   /'
     else
         sed 's/^/   /' "$PART.log"
@@ -257,7 +310,6 @@ KEYS
         STATUS=1
     fi
     if [ "$2" != made ]; then
-        root_of
         synced_file || STATUS=1
     fi
 }
