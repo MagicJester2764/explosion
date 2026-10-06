@@ -232,7 +232,7 @@ make install SHELL=/usr/bin/bash DESTDIR=/tmp/stage
 `/bin/sh` is Quark's own shell, which make's recipes are not written for;
 bash is. With four processors and a gigabyte of memory — less than the
 build wants — and `swapd` keeping a file of up to 1536 megabytes, the two
-take about forty minutes, the kernel six of them, writing some twenty-three
+take about forty minutes, the kernel six of them, writing some twenty-four
 thousand pages out on the way and ending no task; and what they install
 boots and passes `dtest` and the C library's tests.
 
