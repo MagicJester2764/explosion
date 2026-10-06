@@ -224,6 +224,18 @@ stage: FORCE
 		echo "tests: staged $$n programs from $$d"; \
 	done
 	@./tools/stage-overlays.sh $(STAGE) $(FSTOOLS) $(DBUS) $(TOOLCHAIN) $(ROOT_OVERLAYS) $(LIVE_OVERLAY)
+	@# binutils' assembler is called `as`, and so is this system's way of
+	@# running a command as somebody else (programs/as), which the guide and
+	@# every user's habit name. The assembler goes to binutils' directory for
+	@# the target, where gcc looks for it before it looks on PATH, and
+	@# /usr/bin/as stays this system's. Written down as an overlay's file, so
+	@# that the next stage takes it back out.
+	@if [ -n "$(strip $(TOOLCHAIN))" ] && ! cmp -s $(STAGE)/usr/bin/as programs/as/target/x86_64-unknown-none/release/as; then \
+		mkdir -p $(STAGE)/usr/x86_64-quark/bin; \
+		mv $(STAGE)/usr/bin/as $(STAGE)/usr/x86_64-quark/bin/as; \
+		echo usr/x86_64-quark/bin/as >> $(STAGE)/.overlays; \
+		cp programs/as/target/x86_64-unknown-none/release/as $(STAGE)/usr/bin/as; \
+	fi
 	@# And with the development set, what cargo is told on this system
 	@# (devel/cargo-config.toml): cargo reads .cargo/config.toml in every
 	@# directory above a project, / among them, so there it holds for any
