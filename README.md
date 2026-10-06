@@ -7,7 +7,8 @@ other people's software is built for it.
 ../quark            the microkernel
 ../quarkutils       the programs that run on it
 ../bang             the UEFI bootloader
-../quark-toolchain  the cross compilers, for the ports
+../quark-toolchain  the compilers: cross ones for the ports, and ones that
+                    run on Quark, for the development set
 ./                  this: staging, image assembly, QEMU targets, every port
                     of somebody else's software, and the programs that make
                     a distribution of it: its packages, its installer, its
@@ -115,7 +116,7 @@ wherever it was built, by variable, and leaves it out by default:
 | `WAYLAND_CLIENTS=<dir>` | Every executable in the directory into `/usr/bin`, and its `share/` into `/usr/share`. `clients/` here is one: weston's clients, the small test clients, and GTK's `hello-world`. |
 | `TEST_SUITES="<dir> …"` | Each directory's programs into `/usr/bin` and its `*.tests` lists into `/etc`, for `runtests`. |
 | `ROOT_OVERLAYS="<dir> …"` | Trees laid out like the root — fonts, their configuration, keyboard data — copied over the stage as they are. |
-| `TOOLCHAIN="<dir> …"` | The development set, trees laid out like the root: the C and C++ compilers that run on Quark (`../quark-toolchain`'s `build-native.sh`, `~/opt/native`), Rust's compiler and cargo (its `rust-native.sh`, `~/opt/native-rust`), and the GNU programs a build runs (`toolchain/build-gnu-tools.sh`). The root is four gigabytes with it, and sparse where it is built. |
+| `TOOLCHAIN="<dir> …"` | The development set, trees laid out like the root: the C and C++ compilers that run on Quark (`../quark-toolchain`'s `build-native.sh`, `~/opt/native`), Rust's compiler and cargo (its `rust-native.sh`, `~/opt/native-rust`), and the GNU programs a build runs (`toolchain/build-gnu-tools.sh`). The root is four gigabytes with it, and sparse where it is built. binutils' assembler goes where gcc looks for it first, `/usr/x86_64-quark/bin/as`: `/usr/bin/as` is this system's way to run a command as somebody else. |
 
 Each is recorded as it is staged, so building again without the variable takes
 its files back out. Programs are stripped on the way in, which needs
@@ -195,6 +196,45 @@ service NAME [needs=A,B] [restart=always|on-failure|never] [register=X] PATH [AR
 ```
 
 `../quarkutils/docs/services.md` says it whole.
+
+### The system, built on itself
+
+With the development set and coreutils staged (`TOOLCHAIN`, `COREUTILS`),
+a system builds its own kernel and userland. What it cannot do for itself
+is fetch — there is no registry to reach from it — so the sources and
+every crate they use go in as an overlay, laid out like the root:
+
+```
+usr/src/quark/                 ../quark, as `git archive` gives it
+usr/src/quarkutils/            ../quarkutils, the same
+usr/src/rust/library/          the std fork's library, with its backtrace
+                               submodule: for the programs built on std
+usr/src/cargo-home/registry/   what cargo fetched on a machine that has
+                               built both: its ~/.cargo/registry
+```
+
+`/.cargo/config.toml` is staged with the set (`devel/cargo-config.toml`):
+which linker each target is linked with here, and that cargo is offline.
+Then, on the system, the two are built as a distribution builds them — the
+kernel installed into a stage, and the userland against the ABI the kernel
+installed there, the check required rather than skipped:
+
+```bash
+export CARGO_HOME=/usr/src/cargo-home
+cd /usr/src/quark
+make SHELL=/usr/bin/bash
+make install DESTDIR=/tmp/stage SHELL=/usr/bin/bash
+cd /usr/src/quarkutils
+make SHELL=/usr/bin/bash DESTDIR=/tmp/stage REQUIRE_ABI=1
+make install SHELL=/usr/bin/bash DESTDIR=/tmp/stage
+```
+
+`/bin/sh` is Quark's own shell, which make's recipes are not written for;
+bash is. With four processors and a gigabyte of memory — less than the
+build wants — and `swapd` keeping a file of up to 1536 megabytes, the two
+take about forty minutes, the kernel six of them, writing some twenty-three
+thousand pages out on the way and ending no task; and what they install
+boots and passes `dtest` and the C library's tests.
 
 ## Installing
 
