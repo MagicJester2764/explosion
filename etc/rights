@@ -6,6 +6,8 @@
 #   become   run a command as another user with one's own password (`as`)
 #   clock    set the date
 #   network  say how the network treats what comes in (`netctl filter`)
+#   realtime run a thread in a real-time class, ahead of every ordinary
+#            program (`pthread_setschedparam` with SCHED_FIFO or SCHED_RR)
 #   all      everything, the right to say who anybody is among it
 #
 # An account with no line has none of them, unless it is root, which has
